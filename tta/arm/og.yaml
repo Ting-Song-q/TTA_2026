@@ -1,0 +1,140 @@
+# SO-101 视觉指导抓取（原始 ticks）
+# 参考: grasp_test/factory_ik、armpi_pro/intelligent_grasp、arm/grasp.py
+#
+# 流程: initial → grasp观察位 → PID跟踪红块 → 锁定pan/reach
+#       → 高位接近 → 下降(保留锁定量) → 闭爪 → 抬起 → place → initial
+
+port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
+baud: 1000000
+
+motion:
+  step_ticks: 40
+  step_s: 0.06
+  settle_s: 0.4
+  hold_hz: 10.0
+  arrive_tol_ticks: 8
+  joint_limits:
+    shoulder_pan: [800, 3300]
+    shoulder_lift: [800, 3300]
+    elbow_flex: [800, 3300]
+    wrist_flex: [800, 3300]
+    wrist_roll: [800, 3300]
+    gripper: [700, 2800]
+
+camera:
+  index_or_path: /dev/video11
+  width: 640
+  height: 480
+  fps: 30
+  settle_frames: 8
+  frame_timeout_s: 5.0
+
+vision:
+  enabled: true
+  detect_on_arrive: true
+  # 与 grasp_test factory_ik 一致的期望十字（夹爪投影点需现场再调）
+  desired_center: [320, 395]
+  output_directory: output/og_grasp_vision
+
+detector:
+  roi: [0.08, 0.15, 0.92, 0.92]
+  red_hsv:
+    lower1: [0, 75, 45]
+    upper1: [18, 255, 255]
+    lower2: [165, 75, 45]
+    upper2: [180, 255, 255]
+  red_rgb:
+    min_r: 95
+    min_r_minus_g: 28
+    min_r_minus_b: 22
+    max_g: 205
+  min_area: 500
+  min_rect_fill: 0.40
+  aspect_ratio_range: [0.35, 2.80]
+  open_kernel: 3
+  close_kernel: 5
+
+# 真视觉引导：跟踪积分 pan/reach，稳定后带着锁定量下降闭爪
+auto_grasp:
+  enabled: true
+  run_after_align: true
+  go_place_after: true
+  return_initial: true
+
+  gripper_open: 1200
+  gripper_close: 2100
+
+  # PID（P-only，同原厂死区锁定）
+  x_pid_p: 0.35          # px → pan ticks
+  y_pid_p: 0.25          # px → reach
+  pid_lock_px: 10        # |err|<此值时锁定 setpoint=测量，抑抖
+
+  stable_err_u: 22
+  stable_err_v: 28
+  stable_frames: 3
+  track_timeout_s: 14.0
+  continue_on_timeout: true   # 超时若曾检出，仍用最后 pan/reach 抓
+  track_settle_first_s: 0.25
+  track_settle_s: 0.08
+
+  # 目标放稳门控（帧间位移，参考 intelligent_grasp）
+  position_settle_px: 3
+  position_settle_frames: 5
+
+  pan_limits: [1600, 2500]
+  reach_limits: [-250, 250]
+  reach_elbow_scale: 0.8
+  reach_lift_scale: -0.35
+
+  # 锁定后额外前伸（对应 factory grasp_y_extra）
+  grasp_reach_extra: 25
+
+  # 只改竖直相关关节；shoulder_pan 始终用锁定值
+  approach_delta:
+    shoulder_lift: -25
+    elbow_flex: 30
+    wrist_flex: 10
+  descend_delta:
+    shoulder_lift: -55
+    elbow_flex: 55
+    wrist_flex: 20
+  lift_delta:
+    shoulder_lift: 80
+    elbow_flex: -45
+    wrist_flex: -15
+
+  approach_settle_s: 0.8
+  descend_settle_s: 1.0
+  close_settle_s: 0.85
+  lift_settle_s: 0.8
+
+  # 闭爪前二次视觉门控（可选）
+  close_require_visible: false
+  close_max_err: [50, 60]
+  close_min_area: 0
+
+poses:
+  initial:
+    shoulder_pan: 2008
+    shoulder_lift: 884
+    elbow_flex: 2301
+    wrist_flex: 3106
+    wrist_roll: 2056
+    gripper: 2027
+
+  # 观察/跟踪位：夹爪张开
+  grasp:
+    shoulder_pan: 2012
+    shoulder_lift: 1833
+    elbow_flex: 1455
+    wrist_flex: 2873
+    wrist_roll: 2051
+    gripper: 1200
+
+  place:
+    shoulder_pan: 1934
+    shoulder_lift: 860
+    elbow_flex: 2994
+    wrist_flex: 850
+    wrist_roll: 2057
+    gripper: 1200

@@ -1,0 +1,22 @@
+<launch>
+    <!-- 可单独启动避障守门；实机只读测试时可将输出改到测试话题。 -->
+    <arg name="config" default="$(find rmep_nav)/scripts/nav_2026/mission_config.yaml" />
+    <arg name="scan_topic" default="/scan" />
+    <arg name="nav_cmd_topic" default="/cmd_vel_nav" />
+    <arg name="output_cmd_topic" default="/cmd_vel" />
+    <arg name="start_visual_obstacle" default="true" />
+
+    <node pkg="rmep_nav" type="avoidance_controller.py" name="avoidance_controller" output="screen">
+        <param name="config" value="$(arg config)" />
+        <param name="scan_topic" value="$(arg scan_topic)" />
+        <param name="nav_cmd_topic" value="$(arg nav_cmd_topic)" />
+        <param name="output_cmd_topic" value="$(arg output_cmd_topic)" />
+    </node>
+
+    <!-- 视觉节点独立运行，异常退出不会绕过激光失效闭锁。 -->
+    <group if="$(arg start_visual_obstacle)">
+        <node pkg="rmep_nav" type="vision_obstacle_node.py" name="vision_obstacle" output="screen">
+            <param name="config" value="$(arg config)" />
+        </node>
+    </group>
+</launch>

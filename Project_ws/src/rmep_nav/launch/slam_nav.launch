@@ -1,0 +1,17 @@
+<launch>
+    <!-- SLAM 建图导航：gmapping 发 map→odom，EKF 发 odom→base_link。
+         注意：rmep_base 的 odom_tf_switch=False，必须起 EKF，否则 TF 断成两棵树。
+         跑 closeloop / 固定地图任务请用 map_amcl_move.launch，不要用本文件。 -->
+
+    <!-- 1. EKF: /odom + /imu_data → odom→base_link TF + /odometry/filtered -->
+    <include file="$(find rmep_nav)/launch/ekf.launch" />
+
+    <!-- 2. gmapping: 需要 odom→base_link 已存在，才会发 map→odom -->
+    <include file="$(find rmep_gmapping)/launch/gmapping.launch" />
+
+    <!-- 3. move_base（订 /odometry/filtered） -->
+    <arg name="local_planner" default="teb" />
+    <include file="$(find rmep_nav)/launch/move_base.launch">
+        <arg name="local_planner" value="$(arg local_planner)" />
+    </include>
+</launch>

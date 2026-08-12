@@ -1,0 +1,76 @@
+zones:
+  parking:  {x: 0.0, y: 0.0, yaw: 0.0}
+  pickup:   {x: 0.0, y: 0.0, yaw: 0.0}   # TODO: 建图后填入
+  loading:  {x: 0.0, y: 0.0, yaw: 0.0}
+  rescue:
+    1: {x: 0.0, y: 0.0, yaw: 0.0}
+    2: {x: 0.0, y: 0.0, yaw: 0.0}
+    3: {x: 0.0, y: 0.0, yaw: 0.0}
+    4: {x: 0.0, y: 0.0, yaw: 0.0}
+
+shelf:
+  grid: 3x3
+  cell_size_mm: 160
+  # 线性索引: 0 1 2 / 3 4 5 / 6 7 8；中心4 + 边沿1,3,5,7
+  center_cells: [1, 3, 4, 5, 7]
+
+comm:
+  drone_host: "192.168.31.110"
+  drone_user: "root"
+  drone_password: "123456"
+  rescue_cmd_path: "/mnt/rescue_cmd.csv"
+  loading_done_path: "/mnt/loading_done.flag"
+  delivery_done_path: "/mnt/delivery_done.flag"
+
+timeouts:
+  wait_drone_cmd: 120
+  grasp: 30
+  nav_goal: 60
+  delivery: 300
+
+vision:
+  image_topic: "/ep_cam/image_raw"
+  # 相对 nav_2026 目录；也可改成绝对路径
+  camera_yaml: "../../../rmep_base/config/head_camera.yaml"
+  settle_frames: 5
+  frame_timeout: 5.0
+  save_debug: true
+  debug_dir: "/tmp/rescue_vision"
+
+  detector:
+    mode: "hsv"          # hsv | yolo
+    yolo_model: ""       # 例如 /home/tta/.../best.pt
+    shelf_roi: [0.15, 0.1, 0.85, 0.9]
+    min_area: 150
+    min_circularity: 0.45
+    red_hsv:
+      lower1: [0, 80, 60]
+      upper1: [10, 255, 255]
+      lower2: [170, 80, 60]
+      upper2: [180, 255, 255]
+
+  grasp:
+    enabled: true
+    require_hardware: false   # 无机械臂时 false：识别成功即通过
+    max_retries: 3
+    verify_after_grasp: true
+    align:
+      enabled: true
+      pixel_deadband: 35
+      linear_speed: 0.05
+      angular_speed: 0.25
+      max_iters: 8
+      center_offset: [0, 0]
+    arm:
+      default: [0.10, 0.10]
+      lift_pos: [0.05, 0.15]
+      # 按格子索引填 arm(x,y)，需现场标定
+      cell_positions:
+        "1": [0.10, 0.18]
+        "3": [0.04, 0.10]
+        "4": [0.10, 0.10]
+        "5": [0.16, 0.10]
+        "7": [0.10, 0.04]
+    gripper:
+      open_time: 0.5
+      close_time: 0.8

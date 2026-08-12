@@ -1,0 +1,5 @@
+<launch>
+    <!-- Default: changd.yaml（与 mission_config / map_amcl_move 对齐）。换图: map:=xxx.yaml -->
+    <arg name="map" default="new_field.yaml" />
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find rmep_nav)/map/$(arg map)"/>
+</launch>

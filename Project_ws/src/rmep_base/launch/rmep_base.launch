@@ -1,0 +1,67 @@
+<launch>
+    
+
+    <!-- Connect Mode -->
+    <param name="connect_mode" value='rndis' />
+    <!-- ap , sta , rndis -->
+    
+    <!-- Camera -->
+    <param name="is_camera" type="bool" value="True" />
+    <param name="camera_image_topic" type="str" value="ep_cam/image_raw" />
+    <param name="camera_info_topic" type="str" value="ep_cam/camera_info" />
+    <param name="resolution" type="str" value="STREAM_720P" />  <!-- STREAM_360P STREAM_720P -->
+    
+    <!-- IMU -->
+    <param name="imu_topic" type="str" value="imu_data" />
+    <param name="imu_frame_id" type="str" value="imu_link" />
+    <param name="imu_freq" type="int" value="50" /> <!-- 1, 5, 10, 20, 50 -->
+    
+    <!-- Odom 里程计参数 --> 
+    <param name="odom_topic" type="str" value="odom" />
+    <param name="odom_frame_id" type="str" value="base_link" />
+    <!-- False：只发 /odom 话题，odom→base_link TF 交给 ekf_se，避免与 EKF 双发布导致转向粒子发散 -->
+    <param name="odom_tf_switch" type="bool" value="False" />
+    
+    <!-- Arm & Grip & Gimbal-->
+    <param name="is_arm" type="bool" value="True" />
+    <param name="is_gripper" type="bool" value="True" />
+    <param name="is_gimbal" type="bool" value="False" />
+    <param name="gimbal_freq" type="int" value="50" /> <!-- 1, 5, 10, 20, 50 -->
+    
+    <!-- CMD_Topic -->
+    <param name="cmd_topic" type="str" value="cmd_vel" />
+    <!-- 超过该时间没有收到新速度指令时，底盘强制发送零轮速。 -->
+    <param name="cmd_vel_timeout" type="double" value="20" />
+    <!-- 即使有节点绕过避障守门直接发布速度，底盘层仍执行最终限速。 -->
+    <param name="max_cmd_linear_speed" type="double" value="0.30" />
+    <param name="max_cmd_angular_speed" type="double" value="0.80" />
+    
+    <!-- LED Setting -->
+    <param name="led_r" type="int" value="255" />   <!-- 0-255 -->
+    <param name="led_g" type="int" value="0" />
+    <param name="led_b" type="int" value="0" />
+    
+    <!-- Chassis Size -->
+    <param name="chassis_shape_a" value="0.1" />
+    <param name="chassis_shape_b" value="0.1" />
+    <param name="chassis_wheel_r" value="0.05" />
+    <param name="chassis_freq" type="int" value="50" /> <!-- 1, 5, 10, 20, 50 -->
+    
+        <!-- Run the rmep_base nodes -->
+    <node pkg = "rmep_base" type="rmep_bringup.py" name="rmep_base" output="screen" />
+
+        <!-- Run the img_processing nodes -->
+
+    
+        <!-- lidar driver -->
+    <include file="$(find rplidar_ros)/launch/rplidar_a1.launch"/>
+        <!-- tf of base_link to laser x 激光雷达在机器人后方0.1m 在机器人中心线 离地高度 逆时针180度安装（90 1.57）   -->
+    <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser" 
+        args="-0.1 0.0 0.05 -3.1415926 0.0 0.0 /base_link /laser 60" />
+
+    <!-- tf of base_link to imu -->
+    <node pkg="tf" type="static_transform_publisher" name="imu_to_base_link" args="0 0 0 0 0 0 /base_link /imu_link 60" />
+    
+    
+      
+</launch>

@@ -1,0 +1,31 @@
+image: changd.pgm
+resolution: 0.020000
+# ROS 原点 = 图像左下角在 map 系中的位姿；图幅 450x230 → 约 9.0m x 4.6m
+origin: [-1.000000, -1.000000, 0.000000]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
+
+# zones 像素约定：图像左上角为 (0,0)，x 向右，y 向下（与示意图标注一致）
+# 换算到 map：map_x = origin_x + px * resolution
+#             map_y = origin_y + (height - py) * resolution   # height=230
+# 区中心（map，Y↑）：
+#   R4(0.0,2.8) ---- pickup(3.6,2.6) ---- R2(7.2,2.8)
+#                    parking(3.6,1.2) 车头朝取货(+Y, yaw=1.57)
+#   R3(0.0,-0.4) --- loading(3.6,-0.2) --- R1(7.2,-0.4)
+zones:
+  rescue:
+    1:
+      polygon: [[430, 220], [390, 220], [390, 180], [430, 180]]
+    2:
+      polygon: [[430, 60], [390, 60], [390, 20], [430, 20]]
+    3:
+      polygon: [[70, 220], [30, 220], [30, 180], [70, 180]]
+    4:
+      polygon: [[70, 60], [30, 60], [30, 20], [70, 20]]
+  start_finish:
+    polygon: [[250, 140], [210, 140], [210, 100], [250, 100]]
+  pickup:
+    polygon: [[250, 60], [210, 60], [210, 40], [250, 40]]
+  loading:
+    polygon: [[250, 210], [210, 210], [210, 170], [250, 170]]

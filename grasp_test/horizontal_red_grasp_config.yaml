@@ -1,0 +1,178 @@
+# ArmPi Pro 前向夹取配置
+# 这个文件尽量只放“现场需要调”的参数，便于反复测试。
+
+vision:
+  # 相机话题。ArmPi Pro 原厂通常是 /usb_cam/image_raw
+  image_topic: "/usb_cam/image_raw"
+
+  # 机械臂切到观察位后，丢弃前几帧，避免模糊和曝光未稳定
+  settle_frames: 15
+  frame_timeout: 5.0
+  frame_max_age: 0.5
+
+  # 是否保存调试图
+  save_debug: true
+
+  # 调试图输出目录
+  debug_dir: "/home/ubuntu/Desktop/grasp_test/debug/horizontal_red_grasp"
+
+  detector:
+    # ROI: 只在这个归一化区域内找红色，顺序为 [x1, y1, x2, y2]
+    roi: [0.08, 0.15, 0.92, 0.92]
+
+    # 红色 HSV 阈值。光线变化大时先调这里。
+    red_hsv:
+      lower1: [0, 75, 45]
+      upper1: [18, 255, 255]
+      lower2: [165, 75, 45]
+      upper2: [180, 255, 255]
+
+    # 额外 RGB 约束，用来减少手、肤色、阴影误检
+    red_rgb:
+      min_r: 95
+      min_r_minus_g: 28
+      min_r_minus_b: 22
+      max_g: 205
+
+    # 最小面积，太小的红色噪声不要
+    min_area: 500
+
+    # 轮廓填充率，越大越像“实心方块”
+    min_rect_fill: 0.40
+
+    # 形态学开闭操作
+    open_kernel: 3
+    close_kernel: 5
+
+  grasp:
+    # 默认走安全的 joint_trajectory。
+    # 如果后面要实验 ArmPi Pro 原厂 IK，再改成 factory_ik。
+    backend: "factory_ik"
+
+    align:
+      enabled: true
+      mode: "arm_only"
+
+      # 图像上允许误差的死区，越大越容易认为“已经对准”
+      pixel_deadband: 36
+
+      # 目标在图像中的理想位置偏移，单位像素
+      # [0, 45] 表示比图像中心再往下 45 像素
+      center_offset: [0, 45]
+
+      # 最多对位迭代次数
+      max_iters: 8
+
+      # 图像误差到关节增量的比例
+      arm_gain_u: 0.0008
+      arm_gain_v: 0.0008
+
+      # 单次最多动多少，防止抖太大
+      arm_step_limit: 0.04
+
+      # 对位阶段关节限制
+      arm_limits:
+        joint1: [-0.80, 0.80]
+        joint2: [0.25, 1.10]
+
+    # 只有 backend=factory_ik 时才会用到
+    factory_ik:
+      enabled: true
+      use_factory_observe: false
+
+      # 左右量（更像底座/末端左右对准量）
+      x_dis: 500
+
+      # 前后距离量。越大通常越往前伸
+      y_dis: 0.15
+
+      # 图像里的目标点。目标中心逼近这里时开始允许抓取
+      # 前向观察位下目标常偏画面下方，y_center 可略大于图像中心
+      x_center: 320
+      y_center: 395
+
+      # PID 比例项
+      x_pid_p: 0.06
+      y_pid_p: 0.00003
+
+      # 左右/前后范围
+      x_limits: [200, 800]
+      y_limits: [0.12, 0.26]
+
+      # 抓取前稳定条件：连续 stable_frames 帧都进入这个误差范围
+      stable_err_u: 22
+      stable_err_v: 28
+      stable_frames: 3
+
+      # 最多跟踪多久，超时后也会尝试按当前值抓一次
+      track_timeout: 12.0
+
+      # 旧原厂 IK 用的观察点（目前默认不自动启用）
+      observe_xyz: [0.0, 0.15, 0.03]
+
+      # 跟踪阶段的 xyz / 俯仰。单位米；z 通常在 0.05~0.25 量级，绝不能到 1.0
+      track_z: 0.21
+      track_x: 0.01
+      # pitch 必须落在 track_pitch_range 内，否则 setPitchRanges 会异常/难收敛
+      track_pitch: -115.0
+      track_pitch_range: [-145.0, -90.0]
+      track_enter_duration_ms: 600
+      track_enter_settle: 0.25
+      track_move_duration_ms: 120
+      track_move_settle: 0.08
+
+      # 最终抓取阶段：相对跟踪位略前伸、略下降。
+      # 重要：原厂左右只靠舵机6(x_dis)，IK 的 x 必须保持 0；
+      # grasp_z 要从 track_z(0.21) 附近小幅下降，不要直接跳到 0/-0.08（前向姿态下常无解）。
+      grasp_x: 0.0
+      grasp_z: 0.14
+      grasp_y_extra: 0.02
+      grasp_y_comp: 0.0
+      grasp_z_comp: 0.0
+      grasp_pitch: -120.0
+      grasp_pitch_range: [-145.0, -90.0]
+
+      # pitch 到补偿量的映射
+      grasp_pitch_map_in: [-145.0, -95.0]
+      grasp_pitch_map_out: [-0.02, 0.02]
+
+      # 原厂总线舵机 1 号夹爪开合值
+      open_servo: 120
+      close_servo: 450
+
+      # 抓起后的回收姿态（原厂舵机值）
+      lift_servos: [450, 500, 80, 825, 625, 500]
+
+    arm:
+      # 前向观察位，五个关节角（弧度）
+      observe: [0.0, 0.85, -0.85, -1.60, 0.0]
+
+      # 这里通常和 observe 一样，方便抓取前回到前向准备位
+      home: [0.0, 0.85, -0.85, -1.60, 0.0]
+
+      # 下面这些是 joint_trajectory 路径会用到的固定姿态
+      pregrasp: [0.0, 0.78, -0.78, -1.25, 0.0]
+      grasp: [0.0, 0.72, -0.70, -1.30, 0.0]
+      retreat: [0.0, 0.92, -0.82, -1.20, 0.0]
+
+      # 是否在对准后的姿态基础上叠加 delta
+      relative_to_aligned: true
+
+      pregrasp_delta: [0.0, -0.10, 0.10, -0.08, 0.0]
+      grasp_delta: [0.0, -0.24, 0.28, -0.20, 0.0]
+      retreat_delta: [0.0, 0.10, 0.02, 0.08, 0.0]
+
+      joint_limits:
+        joint1: [-0.80, 0.80]
+        joint2: [0.20, 1.10]
+        joint3: [-1.45, -0.35]
+        joint4: [-1.80, -0.80]
+        joint5: [-1.20, 1.20]
+
+    gripper:
+      # 启动/观察阶段先张开到这个绝对角度
+      startup_open_target: -0.90
+      # 抓取前再次张开到这个绝对角度
+      open_target: -0.90
+      # 最后闭合到这个绝对角度
+      close_target: -0.40

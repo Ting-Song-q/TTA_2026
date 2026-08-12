@@ -1,0 +1,13 @@
+digraph G {
+"base_link" -> "imu_link"[label="Broadcaster: /imu_to_base_link\nAverage rate: 16.769 Hz\nMost recent transform: 1725607077.781 ( -0.049 sec old)\nBuffer length: 4.950 sec\n"];
+"odom" -> "base_link"[label="Broadcaster: /rmep_base\nAverage rate: 78.329 Hz\nMost recent transform: 1725607077.710 ( 0.022 sec old)\nBuffer length: 4.902 sec\n"];
+"base_link" -> "laser"[label="Broadcaster: /base_link_to_laser\nAverage rate: 16.795 Hz\nMost recent transform: 1725607077.756 ( -0.024 sec old)\nBuffer length: 4.882 sec\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1725607077.732"[ shape=plaintext ] ;
+ }->"odom";
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1725607077.732"[ shape=plaintext ] ;
+ }->"odom_combined";
+}

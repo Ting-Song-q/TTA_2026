@@ -1,0 +1,372 @@
+# Mission safety
+mission:
+  allow_unimplemented_actions: true
+  # 到达装货区后，完成装货所需时间（秒）；发 loading_done 之前必须走完
+  loading_hold_sec: 3.0
+  # 到达救援区后，完成卸货所需时间（秒）；发 unload_done 之前必须走完
+  unload_hold_sec: 3.0
+  # true：装货/卸货结束后在终端按回车再发信号（人工确认）
+  wait_operator_confirm: false
+  # 第一次通讯：读取 rescue_target.flag 中的最终目标点 1/2/3/4
+  # （不再从 rescue_cmd.csv 推断目标点；preferred_rescue_level 已废弃）
+
+# 运动参数（closed_loop / openloop 共用）
+car:
+  speed: 0.30
+  turn_speed: 0.6
+  align_speed: 0.8
+
+# 航点来自 map/changd.yaml 像素 zones → map 坐标
+# 换算：changd.pgm 450x230，resolution=0.02，origin=[-1,-1]（ROS 图左下角）
+# 像素约定：左上角原点、x 右、y 下 → map_x=ox+px*res，map_y=oy+(H-py)*res
+# 场地示意（Y↑，与 changd 区号一致）：
+#   R4(0.0,2.8) ---- pickup(3.6,2.6) ---- R2(7.2,2.8)
+#                    parking(3.6,1.2) 车头朝取货(+Y)
+#   R3(0.0,-0.4) --- loading(3.6,-0.2) --- R1(7.2,-0.4)
+# 注意：PyYAML 1.1 会把裸键 y 解析成 True，坐标键请写成 "y"
+zones:
+  # changd start_finish → parking；车头朝取货区（+Y, yaw≈π/2）
+  parking: {x: 3.6, "y": 1.2, yaw: 1.57}
+  # 北侧取货，车头朝 +Y
+  pickup:  {x: 3.6, "y": 2.6, yaw: 1.57}
+  # 南侧装货，车头朝 -Y
+  loading: {x: 3.6, "y": -0.2, yaw: -1.57}
+  rescue:
+    # 左侧(R3/R4)朝内侧 +X；右侧(R1/R2)朝内侧 -X
+    1: {x: 7.2, "y": -0.4, yaw: 3.14}
+    2: {x: 7.2, "y": 2.8, yaw: 3.14}
+    3: {x: 0.0, "y": -0.4, yaw: 0.0}
+    4: {x: 0.0, "y": 2.8, yaw: 0.0}
+
+# 方案二：区域内激光视为已知物体并忽略（不含 parking）
+zone_whitelist:
+  include: [pickup, loading, rescue]
+
+# BEGIN added: vehicle wheel footprint for zone validation
+vehicle:
+  wheel_outer_size:
+    length: 0.30
+    width: 0.24
+  footprint_center_offset: [0.0, 0.0]
+  zone_margin: 0.04
+# END added: vehicle wheel footprint for zone validation
+
+# Pure image-space yellow frame recognition. These parameters do not depend on
+# map coordinates, AMCL, camera height, or the arm angle.
+yellow_frame:
+  enabled: true
+  roi: [0.0, 0.0, 1.0, 1.0]
+  hsv:
+    lower: [15, 60, 80]
+    upper: [40, 255, 255]
+  min_area_ratio: 0.001
+  max_area_ratio: 0.95
+  min_rectangularity: 0.55
+  min_hole_ratio: 0.05
+  min_fill_ratio: 0.03
+  max_fill_ratio: 0.75
+  morphology:
+    median_blur: 5
+    open_kernel: 5
+    close_kernel: 7
+    close_iterations: 2
+  partial:
+    enabled: true
+    hough_threshold: 30
+    min_line_length_ratio: 0.08
+    max_line_gap_ratio: 0.04
+    perpendicular_tolerance_deg: 18.0
+    side_merge_distance_ratio: 0.04
+    corner_extension_ratio: 0.10
+    max_bbox_fill_ratio: 0.55
+
+# BEGIN added: vision-first zone-entry validation config
+# Zone-entry validation
+# 开环默认关闭：到达航点后视为驱动轮已正确入区；需要视觉/地图校验时改 true
+zone_entry:
+  enabled: false
+  prefer_vision: true
+  fallback_to_map: true
+  # open_loop 默认用 mission_config 航点；要用标定坐标时改 true
+  require_calibration: false
+  use_calibration: false
+  calibration_file: "zone_calibration.yaml"
+  max_scan_age: 0.5
+  max_tf_age: 0.5
+  max_amcl_pose_age: 1.0
+  max_position_std: 0.04
+  max_yaw_std: 0.10
+  map_validation:
+    mode: safe_pose
+    position_tolerance: 0.04
+    yaw_tolerance: 0.12
+  vision_confidence: 0.65
+  vision_sample_count: 5
+  vision_min_valid_samples: 3
+  vision_consensus_count: 3
+  vision_sample_interval: 0.08
+  ideal_wheels: 4
+  adjustment:
+    enabled: true
+    max_attempts: 3
+    max_step: 0.08
+    max_yaw_step: 0.10
+    max_total_distance: 0.20
+    linear_speed: 0.05
+    angular_speed: 0.15
+    min_distance: 0.015
+    min_yaw: 0.02
+    settle_time: 0.50
+    control_rate: 20
+  geometry_validation:
+    enabled: true
+    # 多数区 0.8×0.8；pickup 为 0.8×0.4，tolerance 放宽以兼容
+    expected_size: [0.8, 0.8]
+    size_tolerance: [0.25, 0.45]
+    min_rectangularity: 0.55
+    min_projected_area: 0.20
+  homography:
+    enabled: false
+    image_points: []
+    base_points: []
+# END added: vision-first zone-entry validation config
+
+# Zone polygons（由 map/changd.yaml 像素区换算到 map 坐标）与轮数要求
+# center 由 config_loader 与 zones 同步；polygon 用于入区校验
+zone_bounds:
+  parking:
+    mode: polygon
+    polygon: [[4.0, 0.8], [3.2, 0.8], [3.2, 1.6], [4.0, 1.6]]
+    center: {x: 3.6, "y": 1.2, yaw: 1.57}
+    size: [0.8, 0.8]
+    required_wheels: 4
+  pickup:
+    mode: polygon
+    polygon: [[4.0, 2.4], [3.2, 2.4], [3.2, 2.8], [4.0, 2.8]]
+    center: {x: 3.6, "y": 2.6, yaw: 1.57}
+    size: [0.8, 0.4]
+    required_wheels: 2
+  loading:
+    mode: polygon
+    polygon: [[4.0, -0.6], [3.2, -0.6], [3.2, 0.2], [4.0, 0.2]]
+    center: {x: 3.6, "y": -0.2, yaw: -1.57}
+    size: [0.8, 0.8]
+    required_wheels: 2
+  rescue:
+    1:
+      mode: polygon
+      polygon: [[7.6, -0.8], [6.8, -0.8], [6.8, 0.0], [7.6, 0.0]]
+      center: {x: 7.2, "y": -0.4, yaw: 3.14}
+      size: [0.8, 0.8]
+      required_wheels: 2
+    2:
+      mode: polygon
+      polygon: [[7.6, 2.4], [6.8, 2.4], [6.8, 3.2], [7.6, 3.2]]
+      center: {x: 7.2, "y": 2.8, yaw: 3.14}
+      size: [0.8, 0.8]
+      required_wheels: 2
+    3:
+      mode: polygon
+      polygon: [[0.4, -0.8], [-0.4, -0.8], [-0.4, 0.0], [0.4, 0.0]]
+      center: {x: 0.0, "y": -0.4, yaw: 0.0}
+      size: [0.8, 0.8]
+      required_wheels: 2
+    4:
+      mode: polygon
+      polygon: [[0.4, 2.4], [-0.4, 2.4], [-0.4, 3.2], [0.4, 3.2]]
+      center: {x: 0.0, "y": 2.8, yaw: 0.0}
+      size: [0.8, 0.8]
+      required_wheels: 2
+
+# Shelf
+shelf:
+  grid: 3x3
+  cell_size_mm: 160
+  center_cells: [1, 3, 4, 5, 7]
+
+# Drone communication
+comm:
+  drone_host: "192.168.10.66"
+  drone_user: "forlinx"
+  drone_password: "forlinx"
+  # 最终目标点（主流程读取）；读成功后删除
+  rescue_target_path: "/mnt/rescue_target.flag"
+  # 四区识别结果（仅调试/排查，主流程不再用其决定目标点）
+  rescue_cmd_path: "/mnt/rescue_cmd.csv"
+  loading_done_path: "/mnt/loading_done.flag"
+  delivery_done_path: "/mnt/delivery_done.flag"
+  unload_done_path: "/mnt/unload_done.flag"
+
+timeouts:
+  wait_drone_cmd: 120   # 等待 rescue_target.flag（秒）
+  grasp: 30
+  # move_base 单次到点超时（装货段含预对齐，适当放宽）
+  nav_goal: 90
+  delivery: 600
+
+# Obstacle avoidance（与 run_car_duo / openloop_duo 一致）
+obstacle_avoidance:
+  enabled: true
+  # 安全闭锁：激光缺失、失效或超时后禁止继续输出运动速度。
+  fail_closed: true
+  scan_topic: "/scan"
+  # 开环守门 stop.py：上游 nav_rescue 发到此话题，守门后再出 /cmd_vel
+  nav_cmd_topic: "/cmd_vel_nav"
+  output_cmd_topic: "/cmd_vel"
+  max_scan_age: 0.30
+  max_odom_age: 0.50
+  max_cmd_age: 0.50
+  input_wait_timeout: 5.0
+  min_valid_scan_points: 30
+  # 使用最近五帧方向净空的中值，过滤雷达距离跳变和偶发尖峰。
+  distance_filter_window: 5
+  distance_filter_min_samples: 3
+  # 至少连续三个激光点确认障碍，过滤孤立的异常近距离读数。
+  min_obstacle_cluster: 3
+  # 当前雷达误差较大，急停同样要求三个相邻点确认，避免单点误停。
+  emergency_obstacle_cluster: 3
+  # rmep_base.launch 声明 laser 相对 base_link 旋转 -pi，原始 0 度对应车体后方。
+  lidar_mount: rear
+  # 雷达到车体外廓（实测）；判障使用车体净空 = 激光距离 - 偏置
+  lidar_to_body:
+    front: 0.12
+    back: 0.31
+    left: 0.25
+    right: 0.25
+  # 阈值均为车体外缘之外的净空 (m)
+  safe_distance: 0.20
+  side_safe_distance: 0.15
+  critical_distance: 0.10
+  emergency_stop_distance: 0.05
+  collision_alert_distance: 0.12
+  self_hit_margin: 0.03
+  sector_half_width: 25
+  side_sector_half_width: 55
+  bypass_speed: 0.3
+  creep_ratio: 0.25
+  # 固定绕障：侧移 20cm → 前进 40cm（计入目标）→ 回移 20cm
+  sidestep_distance: 0.20
+  pass_distance: 0.40
+  max_linear_speed: 0.30
+  max_angular_speed: 0.40
+  control_rate: 20
+  max_bypass_time: 15.0
+  move_timeout: 90.0
+  # 白名单外扩（与 run_car_duo 一致）
+  zone_margin: 0.15
+  default_zone_size: [0.8, 0.8]
+  # TEB-style 动态避障（MapLaserNav / closed_loop --nav-mode map_laser）
+  min_obstacle_dist: 0.10
+  inflation_dist: 0.40
+  weight_obstacle: 50.0
+  weight_goal: 1.0
+  weight_velocity: 1.0
+  weight_path: 5.0
+  stuck_timeout: 5.0
+  recovery_duration: 1.0
+
+# MapLaserNav 地图层参数（closed_loop 默认导航）
+map_nav:
+  require_map: true
+  require_amcl: true
+  max_amcl_age: 1.0
+  max_range: 3.0
+  inflate_m: 0.08
+  occupied_thresh: 50
+  unknown_as_occupied: false
+  # 对齐 YaLong TEB 到位容差（0.05 / 0.05）；仅影响 MapLaserNav，closeloop 用 TEB 参数
+  pos_tol: 0.05
+  yaw_tol: 0.05
+  approach_dist: 0.45   # 此距离内线性减速
+  commit_dist: 0.25     # 此距离内直冲，关闭 TEB 绕障
+  overshoot_accept: 0.28 # 进入该半径后若开始远离，触发过冲接受/回收
+
+# 单目机械臂相机障碍观察
+visual_avoidance:
+  enabled: true
+  image_topic: "/ep_cam/image_raw"
+  observation_topic: "/vision_obstacle/risks"
+  debug_image_topic: "/vision_obstacle/debug_image"
+  publish_debug_image: true
+  max_processing_rate: 8.0
+  # 四周扫描缓存中任一方向超过该时间后，视觉优先模式闭锁停车。
+  max_observation_age: 1.50
+  # monitor_only | conservative | vision_preferred
+  # 初次实机标定前只监控，不允许视觉结果直接改变车辆速度。
+  fusion_mode: monitor_only
+  fallback_to_lidar: true
+  vision_only_max_linear_speed: 0.30
+  vision_only_max_angular_speed: 0.20
+  min_confidence: 0.45
+  obstacle_risk_threshold: 0.45
+  emergency_risk_threshold: 0.75
+  # 未完成米制标定时，低风险视觉方向映射为安全阈值外的净空。
+  clear_distance: 0.50
+  roi: [0.05, 0.35, 0.95, 0.98]
+  floor_reference_height_ratio: 0.10
+  color_difference_threshold: 0.24
+  canny_low: 50
+  canny_high: 140
+  min_contour_area_ratio: 0.002
+  risk_occupancy_ratio: 0.10
+  near_row_start: 0.45
+  camera_horizontal_fov_deg: 70.0
+  fixed_camera_yaw_deg: 0.0
+  camera_yaw_topic: "/camera_arm/yaw_deg"
+  camera_yaw_target_topic: "/camera_arm/yaw_target_deg"
+  require_camera_yaw_feedback: false
+  max_camera_yaw_age: 0.50
+  arm_scan:
+    # 机械臂 yaw 驱动接通前保持 false；否则目标角无人执行。
+    enabled: false
+    angles_deg: [0.0, 90.0, 180.0, -90.0]
+    tolerance_deg: 5.0
+    # 到位后先等待振动和图像延迟稳定，再接收该方向的视觉结果。
+    settle_time: 0.15
+    dwell_time: 0.35
+
+# Vision
+vision:
+  image_topic: "/ep_cam/image_raw"
+  camera_yaml: "../../../rmep_base/config/head_camera.yaml"
+  settle_frames: 5
+  frame_timeout: 5.0
+  frame_max_age: 0.5
+  save_debug: true
+  debug_dir: "/tmp/rescue_vision"
+  detector:
+    mode: "hsv"
+    yolo_model: ""
+    shelf_roi: [0.15, 0.1, 0.85, 0.9]
+    min_area: 150
+    min_circularity: 0.45
+    red_hsv:
+      lower1: [0, 80, 60]
+      upper1: [10, 255, 255]
+      lower2: [170, 80, 60]
+      upper2: [180, 255, 255]
+  grasp:
+    enabled: true
+    require_hardware: false
+    max_retries: 3
+    verify_after_grasp: true
+    align:
+      enabled: true
+      pixel_deadband: 35
+      linear_speed: 0.05
+      angular_speed: 0.25
+      max_iters: 8
+      center_offset: [0, 0]
+    arm:
+      default: [0.10, 0.10]
+      lift_pos: [0.05, 0.15]
+      cell_positions:
+        "1": [0.10, 0.18]
+        "3": [0.04, 0.10]
+        "4": [0.10, 0.10]
+        "5": [0.16, 0.10]
+        "7": [0.10, 0.04]
+    gripper:
+      open_time: 0.5
+      close_time: 0.8
+

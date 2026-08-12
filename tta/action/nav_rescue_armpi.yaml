@@ -1,0 +1,173 @@
+# nav_rescue_armpi 参数配置（ArmPi Pro：里程计闭环 / 可选开环）
+# 配套脚本: nav_rescue_armpi.py
+#
+# 【单位】
+#   - 平移 speed：m/s（脚本发布到底盘时自动 ×1000 → mm/s）
+#   - 转向 turn_speed：ArmPi SetVelocity.angular（非 rad/s）
+#   - 话题：/chassis_control/set_velocity
+#
+# 【闭环模式 closed_loop.enable=true】
+#   - 走多远看 zones 航点差；误差进阈值才停（转 180° 靠 yaw 反馈）
+#   - 优先订阅 odom_topic；无 /odom 时用指令速度积分（需标定 angular_to_radps）
+# 【开环回退 enable=false】
+#   - 仍用 segment_motion.*.duration_*
+#
+# 【你主要改】
+#   1) timed.speed / timed.turn_speed
+#   2) zones 坐标与 closed_loop 容差/标定
+#   3) 开环调试时才改 duration_*
+
+# ---------------------------------------------------------------------------
+# 全局速度
+# ---------------------------------------------------------------------------
+  timed:
+    # ★ 平移速度 m/s（0.2 ≈ 200mm/s）
+    speed: 0.2
+    # ★ 转向角速度（ArmPi SetVelocity.angular；闭环建议 0.3~1.0）
+    turn_speed: 0.5
+    set_velocity_topic: "/chassis_control/set_velocity"
+    # 平移/转向段之间短停顿 (s)
+    segment_pause_sec: 0.5
+    # 到点后停车等待 (s)
+    arrive_pause_sec: 5.0
+
+  # ---------------------------------------------------------------------------
+  # ★ 方案一：编码器/里程计闭环
+  # ---------------------------------------------------------------------------
+  closed_loop:
+    enable: true
+    # 有独立里程计节点时改为实际话题；没有则保持 /odom（脚本会自动用指令积分）
+    odom_topic: "/odom"
+    xy_tolerance: 0.03          # 平移到位阈值 (m)
+    yaw_tolerance: 0.08         # 转向到位阈值 (rad，≈4.6°)
+    control_period: 0.05        # 闭环检测周期 (s)
+    timeout_margin: 1.8         # 超时 = 理论时间 × 该系数
+    linear_scale: 1.0           # 指令积分线速度标定
+    # 官方约 angular=0.3 转 180°≈7.5s → angular_to_radps≈1.4
+    # 实测：转不够就略增大，转过头就略减小
+    angular_to_radps: 1.4
+    min_cmd_speed: 0.04
+    odom_stale_sec: 0.5
+
+  # ---------------------------------------------------------------------------
+  # ★ 各航段：速度(可选覆盖) + 开环用 duration_*（闭环时主要用 zones 距离）
+  # ---------------------------------------------------------------------------
+  segment_motion:
+    to_pickup:
+      speed: 0.2
+      duration_x: 4.8
+      duration_y: 0.0
+      turn_speed: 0.0
+      duration_turn: 0.0
+  
+    to_loading:
+      speed: 0.2
+      duration_x: 9.0
+      duration_y: 0.0
+      # 闭环时转角由 zones loading.yaw=3.14 决定；turn_speed 只决定快慢
+      turn_speed: 0.5
+      duration_turn: 2.3
+  
+    pre_rescue_backoff:
+      speed: 0.0
+      duration_x: 0.1
+      duration_y: 0.0
+      duration_turn: 0.0
+  
+    to_rescue_1:
+      speed: 0.15
+      duration_x: 1.50
+      duration_y: 10.7
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_rescue_2:
+      speed: 0.15
+      duration_x: 8.5
+      duration_y: 10.5
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_rescue_3:
+      speed: 0.2
+      duration_x: 9.00
+      duration_y: 1.0
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_rescue_4:
+      speed: 0.15
+      duration_x: 1.50
+      duration_y: 11.2
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_parking_1:
+      speed: 0.2
+      duration_x: 11.00
+      duration_y: 4.00
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_parking_2:
+      speed: 0.2
+      duration_x: 10.80
+      duration_y: 5.00
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_parking_3:
+      speed: 0.2
+      duration_x: 10.00
+      duration_y: 5.50
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+    to_parking_4:
+      speed: 0.2
+      duration_x: 11.5
+      duration_y: 4.00
+      turn_speed: 2.0
+      duration_turn: 1.5
+  
+  # ---------------------------------------------------------------------------
+  # 任务节拍（秒）
+  # ---------------------------------------------------------------------------
+  mission:
+    pickup_hold_sec: 5.0
+    skip_drone_loading_hold_sec: 5.0
+    skip_drone_unload_hold_sec: 5.0
+    loading_hold_sec: 5.0
+    unload_hold_sec: 5.0
+    pre_rescue_backoff_enable: true
+  
+  # ---------------------------------------------------------------------------
+  # 航点：只决定方向正负；走多久看 segment_motion
+  # PyYAML 请写 "y"，不要写裸键 y
+  # ---------------------------------------------------------------------------
+  zones:
+    parking: {x: 0.0, "y": 0.0, yaw: 0.0}
+    pickup:  {x: 0.28, "y": 0.0, yaw: 0.0}
+    loading: {x: -0.23, "y": 0.0, yaw: 3.14}
+    rescue:
+      1: {x: -0.38, "y": 0.65, yaw: 1.57}
+      2: {x: 0.45, "y": 0.70, yaw: 1.57}
+      3: {x: 0.40, "y": -0.68, yaw: -1.57}
+      4: {x: -0.38, "y": -0.75, yaw: -1.57}
+  
+  # ---------------------------------------------------------------------------
+  # 无人机通讯（仅非 --skip-drone；需 pip3 install fabric2）
+  # ---------------------------------------------------------------------------
+  comm:
+    drone_host: "192.168.10.66"
+    drone_user: "forlinx"
+    drone_password: "forlinx"
+    rescue_target_path: "/mnt/rescue_target.flag"
+    loading_done_path: "/mnt/loading_done.flag"
+    delivery_done_path: "/mnt/delivery_done.flag"
+    unload_done_path: "/mnt/unload_done.flag"
+  
+  timeouts:
+    wait_drone_cmd: 600
+    delivery: 600
+  

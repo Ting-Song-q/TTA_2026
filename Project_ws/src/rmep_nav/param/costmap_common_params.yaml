@@ -1,0 +1,20 @@
+# Common costmap parameters — 闭环相关参照 YaLong costmap_common_params_tr
+# footprint / sensor_frame 保持 EP（rmep 0.5×0.5、laser 帧名）
+footprint: [[-0.25, -0.25], [-0.25, 0.25], [0.25, 0.25], [0.25, -0.25]]
+footprint_padding: 0.05
+
+# YaLong: obstacle_range 1.0, raytrace_range 6.0, inflation_radius 0.5
+obstacle_range: 1.0
+raytrace_range: 6.0
+inflation_radius: 0.5
+cost_scaling_factor: 2.5
+
+map_type: costmap
+observation_sources: scan
+scan: {
+    sensor_frame: laser,
+    data_type: LaserScan,
+    topic: /scan,
+    marking: true,
+    clearing: true
+}

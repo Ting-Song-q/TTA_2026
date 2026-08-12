@@ -1,0 +1,117 @@
+# TEB Local Planner — 闭环参数参照 YaLongR8 teb_local_planner_params.yaml
+# 保留 Project_ws EP 全向/麦克纳姆必要项：max_vel_y、acc_lim_y、weight_kinematics_nh=0、EP footprint、
+# odom_topic=odometry/filtered（EKF 输出，勿改回 /odom）。
+TebLocalPlannerROS:
+    odom_topic: odometry/filtered
+    # 与 local_costmap.global_frame=odom 一致（勿用 map，避免局部轨迹/约束依赖 map↔odom 抖动）
+    map_frame: odom
+
+    # 策略相关（对齐 YaLong）
+    teb_autosize: true
+    dt_ref: 0.3
+    dt_hysteresis: 0.1
+    global_plan_overwrite_orientation: true
+    max_global_plan_lookahead_dist: 2.0
+    feasibility_check_no_poses: 2
+    force_reinit_new_goal_dist: 1.0
+    force_reinit_new_goal_angular: 0.78
+    allow_init_with_backwards_motion: true
+    # EP 任务常有同线反向；YaLong 未写此项，保留较大倒车距离避免强制掉头
+    max_backwards_dist: 3.0
+
+    # 运动相关（速度/加速度对齐 YaLong；横向为 EP 全向保留）
+    max_vel_x: 0.3
+    max_vel_x_backwards: 0.2
+    max_vel_y: 0.3
+    max_vel_theta: 0.8
+    acc_lim_x: 0.4
+    acc_lim_y: 0.5
+    acc_lim_theta: 0.8
+
+    min_turning_radius: 0.0
+    wheelbase: 0.0
+    cmd_angle_instead_rotvel: false
+
+    # 车体轮廓：保持 EP 0.5×0.5（勿照搬 YaLong 0.54×0.35）
+    footprint_model:
+        type: "polygon"
+        radius: 0.17
+        line_start: [0.0, 0.0]
+        line_end: [0.35, 0.0]
+        front_offset: 0.35
+        front_radius: 0.35
+        rear_offset: 0.35
+        rear_radius: 0.35
+        vertices: [[-0.25, -0.25], [-0.25, 0.25], [0.25, 0.25], [0.25, -0.25]]
+
+    # 到位容差（对齐 YaLong：更紧的闭环到点）
+    xy_goal_tolerance: 0.05
+    yaw_goal_tolerance: 0.05
+    free_goal_vel: false
+    complete_global_plan: false
+
+    # 障碍物相关（对齐 YaLong）
+    min_obstacle_dist: 0.1
+    inflation_dist: 0.4
+    include_costmap_obstacles: true
+    costmap_obstacles_behind_robot_dist: 1.0
+    obstacle_poses_affected: 25
+    dynamic_obstacle_inflation_dist: 0.40
+    # 无 costmap_converter 插件时动态障碍无效；障碍仍来自 include_costmap_obstacles
+    include_dynamic_obstacles: false
+    costmap_converter_plugin: ""
+    costmap_converter_rate: 5.0
+    obstacle_association_force_inclusion_factor: 1.5
+    obstacle_association_weight_factor: 2.0
+
+    # 路径优化（对齐 YaLong 权重；nh=0 / max_vel_y 权重为 EP 全向）
+    no_inner_iterations: 5
+    no_outer_iterations: 5
+    penalty_epsilon: 0.1
+    optimization_activate: true
+    optimization_verbose: false
+    weight_max_vel_x: 2
+    weight_max_vel_y: 1.0
+    weight_max_vel_theta: 1
+    weight_acc_lim_x: 1
+    weight_acc_lim_y: 1.0
+    weight_acc_lim_theta: 1
+    weight_kinematics_nh: 0
+    weight_kinematics_forward_drive: 1
+    weight_kinematics_turning_radius: 0.0
+    weight_optimaltime: 1
+    weight_shortest_path: 0.0
+    weight_obstacle: 50
+    weight_inflation: 0.1
+    weight_dynamic_obstacle: 50.0
+    weight_dynamic_obstacle_inflation: 0.1
+    weight_viapoint: 1.0
+    weight_adapt_factor: 2.0
+
+    # 多线规划（对齐 YaLong 开启）
+    enable_homotopy_class_planning: true
+    enable_multithreading: true
+    max_number_classes: 2
+    selection_cost_hysteresis: 1.0
+    selection_prefer_initial_plan: 0.95
+    selection_obst_cost_scale: 1.0
+    selection_alternative_time_cost: false
+    roadmap_graph_no_samples: 15
+    roadmap_graph_area_width: 5
+    roadmap_graph_area_length_scale: 1.0
+    h_signature_prescaler: 0.5
+    h_signature_threshold: 0.1
+    obstacle_heading_threshold: 0.8
+    viapoints_all_candidates: true
+    delete_detours_backwards: true
+    max_ratio_detour_duration_best_duration: 3.0
+    visualize_hc_graph: false
+    visualize_with_time_as_z_axis_scale: false
+
+    shrink_horizon_backup: true
+    shrink_horizon_min_duration: 10.0
+    oscillation_recovery: true
+    oscillation_v_eps: 0.1
+    oscillation_omega_eps: 0.1
+    oscillation_recovery_min_duration: 10.0
+    oscillation_filter_duration: 10.0

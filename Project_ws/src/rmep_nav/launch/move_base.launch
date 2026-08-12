@@ -1,0 +1,39 @@
+<launch>
+    <!-- Choose local planner: "teb" (default), "dwa", or "base" (legacy TrajectoryPlannerROS) -->
+    <arg name="local_planner" default="teb"/>
+    <arg name="cmd_vel_topic" default="cmd_vel"/>
+    <!-- 使用 EKF 融合后的里程计，勿直接订轮速 /odom（避免与 ekf 输出冲突） -->
+    <arg name="odom_topic" default="odometry/filtered"/>
+
+    <!-- move_base node -->
+    <node pkg="move_base" type="move_base" name="move_base" clear_params="true" output="screen">
+        <remap from="cmd_vel" to="$(arg cmd_vel_topic)"/>
+        <remap from="odom" to="$(arg odom_topic)"/>
+
+        <rosparam file="$(find rmep_nav)/param/costmap_common_params.yaml" command="load" ns="global_costmap"/>
+        <rosparam file="$(find rmep_nav)/param/costmap_common_params.yaml" command="load" ns="local_costmap"/>
+        <rosparam file="$(find rmep_nav)/param/global_costmap_params.yaml" command="load"/>
+        <rosparam file="$(find rmep_nav)/param/local_costmap_params.yaml" command="load"/>
+        <rosparam file="$(find rmep_nav)/param/move_base_params.yaml" command="load"/>
+        <rosparam file="$(find rmep_nav)/param/global_planner_params.yaml" command="load"/>
+
+        <!-- Global planner plugin migrated from YaLongR8 standard stack -->
+        <param name="base_global_planner" value="global_planner/GlobalPlanner"/>
+
+        <!-- Local planner selection: use if/unless directly on param/rosparam tags -->
+        <param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"
+               if="$(eval arg('local_planner') == 'base')"/>
+        <rosparam file="$(find rmep_nav)/param/base_local_planner_params.yaml" command="load"
+                  if="$(eval arg('local_planner') == 'base')"/>
+
+        <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"
+               if="$(eval arg('local_planner') == 'dwa')"/>
+        <rosparam file="$(find rmep_nav)/param/dwa_local_planner_params.yaml" command="load"
+                  if="$(eval arg('local_planner') == 'dwa')"/>
+
+        <param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS"
+               if="$(eval arg('local_planner') == 'teb')"/>
+        <rosparam file="$(find rmep_nav)/param/teb_local_planner_params.yaml" command="load"
+                  if="$(eval arg('local_planner') == 'teb')"/>
+    </node>
+</launch>

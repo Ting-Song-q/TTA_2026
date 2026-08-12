@@ -1,0 +1,51 @@
+# 基于雷达地图的运动/避障测试配置
+# 默认继承上级 mission_config 的 zones 与 obstacle_avoidance
+
+inherit_mission_config: "../mission_config.yaml"
+
+car:
+  speed: 0.15
+  turn_speed: 0.45
+  rescue_zone: 2
+
+# 地图层参数（OccupancyMap + 闭环到位阈值）
+map_nav:
+  require_map: true
+  require_amcl: true
+  max_amcl_age: 1.0
+  max_range: 3.0
+  inflate_m: 0.08
+  occupied_thresh: 50
+  unknown_as_occupied: false
+  pos_tol: 0.12
+  yaw_tol: 0.08
+  approach_dist: 0.45
+  commit_dist: 0.25
+  overshoot_accept: 0.28
+
+# 可覆盖 mission 中的激光避障阈值（与 laser_avoidance / openloop 一致）
+# 新增 TEB-style 参数：连续速度优化避障（替代旧三段式侧移）
+obstacle_avoidance:
+  enabled: true
+  fail_closed: true
+  lidar_mount: rear
+  safe_distance: 0.20
+  side_safe_distance: 0.15
+  critical_distance: 0.10
+  emergency_stop_distance: 0.05
+  bypass_speed: 0.10
+  sidestep_distance: 0.25
+  pass_distance: 0.35
+  max_linear_speed: 0.30
+  control_rate: 20
+  move_timeout: 90.0
+
+  # TEB-style 避障参数（YaLongR8 标准栈迁移）
+  min_obstacle_dist: 0.10      # 车体与障碍物的最小允许距离
+  inflation_dist: 0.40          # 障碍物代价影响距离（< 此距离开始产生代价）
+  weight_obstacle: 50.0        # 障碍物代价权重
+  weight_goal: 1.0              # 朝向目标方向代价权重
+  weight_velocity: 1.0          # 与期望速度偏离代价权重
+  weight_path: 5.0             # 地图路径占用代价权重
+  stuck_timeout: 5.0           # 卡住多久后进入后退恢复（秒）
+  recovery_duration: 1.0        # 后退恢复持续时间（秒）

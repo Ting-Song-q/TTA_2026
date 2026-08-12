@@ -1,0 +1,15 @@
+# global_planner — 参照 YaLong global_planner_params.yaml
+GlobalPlanner:
+    allow_unknown: false
+    default_tolerance: 0.1
+    visualize_potential: false
+    use_dijkstra: true
+    use_grid_path: false
+    use_quadratic: true
+    old_navfn_behavior: false
+    lethal_cost: 253
+    neutral_cost: 55
+    cost_factor: 3.0
+    publish_potential: true
+    orientation_mode: 1
+    orientation_window_size: 1

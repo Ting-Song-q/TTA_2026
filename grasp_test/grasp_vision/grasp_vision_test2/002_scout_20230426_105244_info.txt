@@ -1,0 +1,5 @@
+stamp=20230426_105244
+found=False
+scout_xyz=[0.0, 0.16, 0.22]
+scout_pitch=-115.0
+reason=no_red_place_frame

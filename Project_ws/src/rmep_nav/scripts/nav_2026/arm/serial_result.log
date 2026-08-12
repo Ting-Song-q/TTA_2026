@@ -1,0 +1,15 @@
+
+=== 2026-07-19 19:09:49 ===
+line_status_after_low: 0x0 (DTR/RTS forced low)
+Opened /dev/ttyUSB0 @ 115200
+TX: $GETA!  (6 bytes, hex=244745544121)
+RX: (no data)
+
+==== Checklist (no AAA) ====
+1. Power ON, PWR/MCU LED on; press RST if needed
+2. Use /dev/ttyUSB* (CH340), NOT /dev/ttyACM0 (DJI)
+3. Baud 115200
+4. open_port: dtr=False, rts=False (no DTR pulse)
+5. Exit script after test; press RST if previous bad script ran
+6. Windows check: python test_win.py --port COM7 --cmd '$GETA!'
+Closed

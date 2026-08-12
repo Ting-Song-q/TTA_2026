@@ -1,0 +1,15 @@
+# Global costmap — 频率参照 YaLong global_costmap_params_tr
+global_costmap:
+    global_frame: map
+    robot_base_frame: base_link
+    update_frequency: 1.0
+    publish_frequency: 1.0
+    static_map: true
+    resolution: 0.05
+    rolling_window: false
+    transform_tolerance: 1.0
+
+    plugins:
+        - {name: static_layer, type: "costmap_2d::StaticLayer"}
+        - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}
+        - {name: inflation_layer, type: "costmap_2d::InflationLayer"}

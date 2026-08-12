@@ -1,0 +1,7 @@
+# BEGIN added: nav_2026 runtime artifacts
+__pycache__/
+.pytest_cache/
+*.py[cod]
+zone_calibration.yaml
+calibration_test.jpg
+# END added: nav_2026 runtime artifacts
