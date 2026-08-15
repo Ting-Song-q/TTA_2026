@@ -34,7 +34,6 @@ import cv2
 import numpy as np
 import rospy
 from sensor_msgs.msg import Image
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 GRASP_TEST_ROOT = SCRIPT_DIR.parent
 WORKSPACE_CANDIDATES = [

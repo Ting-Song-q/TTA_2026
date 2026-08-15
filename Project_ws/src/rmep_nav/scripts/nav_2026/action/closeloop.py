@@ -13,12 +13,15 @@
   - 仅用 ActionClient 发目标并 wait_for_result（勿兼发 /move_base_simple/goal，会抢占取消）
   - 等待 /move_base result：SUCCEEDED 成功；ABORTED 记失败（任务层不继续）
   - 无 TF/开环精修、无走廊 keep_yaw、无漂移 /initialpose reseed
+  - 默认不强制刷 /initialpose（保留 RViz 对准）；可用 --set-initialpose 按 parking 重播
+  - 发导航目标前等待 AMCL 粒子收敛数秒
 
 依赖启动栈：
   1) roscore
   2) roslaunch rmep_base rmep_base.launch
   3) roslaunch rmep_nav map_amcl_move.launch
-  4) python3 action/closeloop.py [--skip-drone --rescue 2]
+  4) RViz「2D Pose Estimate」对准后：
+     python3 action/closeloop.py --skip-drone --rescue 2
 """
 
 from __future__ import print_function
@@ -297,6 +300,8 @@ class NavRescue2026YaLongCloseLoop(object):
         config_path=None,
         move_base_name="move_base",
         clear_costmaps=True,
+        set_initialpose=False,
+        settle_sec=3.0,
     ):
         rospy.init_node("nav_rescue_2026_yalong_closeloop", anonymous=True)
 
@@ -306,6 +311,8 @@ class NavRescue2026YaLongCloseLoop(object):
         self.config = self._load_config(config_path)
         self.state = RescueMission.WAIT_DRONE_CMD
         self.order = None
+        self._set_initialpose = bool(set_initialpose)
+        self._settle_sec = float(settle_sec)
 
         self._loading_completed = False
         self._unload_completed = False
@@ -327,12 +334,6 @@ class NavRescue2026YaLongCloseLoop(object):
             float(parking.get("y", 0.0)),
             float(parking.get("yaw", 0.0)),
         )
-        # EP/AMCL 需要初值；YaLong 实车常靠 launch 初值，这里发一次停车区位姿
-        self.publish_initial_pose(
-            self._parking_pose[0],
-            self._parking_pose[1],
-            self._parking_pose[2],
-        )
 
         self.nav = MoveBaseClosedLoopNav(
             cmd_vel_topic=self.cmd_vel_topic,
@@ -344,6 +345,21 @@ class NavRescue2026YaLongCloseLoop(object):
         self.velocity_publisher = self.nav.velocity_publisher
         self._start_pose_monitor(period_sec=1.0)
 
+        # 默认保留 RViz/launch 已对准位姿；仅 --set-initialpose 时按 parking 重播
+        if self._set_initialpose:
+            self.publish_initial_pose(
+                self._parking_pose[0],
+                self._parking_pose[1],
+                self._parking_pose[2],
+            )
+        else:
+            rospy.loginfo(
+                "[CloseLoop] skip /initialpose (keep RViz/launch pose); "
+                "use --set-initialpose to force parking"
+            )
+
+        self._wait_amcl_settle(self._settle_sec)
+
         self._log_zones()
         rospy.loginfo(
             "[CloseLoop] ready: mission=nav_rescue_2026, "
@@ -352,6 +368,26 @@ class NavRescue2026YaLongCloseLoop(object):
 
         if autostart:
             self.run_mission()
+
+    def _wait_amcl_settle(self, sec=3.0):
+        """发目标前等待粒子收敛，避免刷位姿后立刻猛走导致丢锁。"""
+        sec = max(0.0, float(sec))
+        if sec <= 0.0:
+            return
+        cur = self.nav.lookup_base_pose(max_wait=1.0)
+        if cur is not None:
+            rospy.loginfo(
+                "[CloseLoop] settle %.1fs before nav, pose=(%.3f, %.3f, yaw=%.3f)",
+                sec,
+                cur[0],
+                cur[1],
+                cur[2],
+            )
+        else:
+            rospy.logwarn(
+                "[CloseLoop] settle %.1fs before nav (TF not ready yet)", sec
+            )
+        rospy.sleep(sec)
 
     def _start_pose_monitor(self, period_sec=1.0):
         """每 period_sec 秒在终端打印 map→base_link 位姿。"""
@@ -418,13 +454,14 @@ class NavRescue2026YaLongCloseLoop(object):
         msg.pose.pose.orientation.y = q[1]
         msg.pose.pose.orientation.z = q[2]
         msg.pose.pose.orientation.w = q[3]
+        # 紧协方差：已知停车点，避免粒子大散后立刻导航
         msg.pose.covariance = [
-            0.25, 0, 0, 0, 0, 0,
-            0, 0.25, 0, 0, 0, 0,
+            0.05, 0, 0, 0, 0, 0,
+            0, 0.05, 0, 0, 0, 0,
             0, 0, 0.25, 0, 0, 0,
             0, 0, 0, 0.068, 0, 0,
             0, 0, 0, 0, 0.068, 0,
-            0, 0, 0, 0, 0, 0.068,
+            0, 0, 0, 0, 0, 0.02,
         ]
         rate = rospy.Rate(20)
         start = rospy.Time.now()
@@ -434,7 +471,10 @@ class NavRescue2026YaLongCloseLoop(object):
             rate.sleep()
         rospy.sleep(1.0)
         rospy.loginfo(
-            "[CloseLoop] /initialpose published (%.3f, %.3f, yaw=%.3f)", x, y, yaw
+            "[CloseLoop] /initialpose published (%.3f, %.3f, yaw=%.3f) tight",
+            x,
+            y,
+            yaw,
         )
 
     def _set_state(self, state):
@@ -730,6 +770,17 @@ def main():
         help="关闭发目标前 clear_costmaps（YaLong 默认开启）",
     )
     parser.add_argument(
+        "--set-initialpose",
+        action="store_true",
+        help="按 mission_config parking 强制发 /initialpose（默认不发，保留 RViz 对准）",
+    )
+    parser.add_argument(
+        "--settle-sec",
+        type=float,
+        default=3.0,
+        help="发导航前等待 AMCL 收敛秒数（默认 3.0；0 跳过）",
+    )
+    parser.add_argument(
         "--config",
         type=str,
         default="",
@@ -745,6 +796,8 @@ def main():
         config_path=args.config or None,
         move_base_name=args.move_base_name,
         clear_costmaps=not args.no_clear_costmaps,
+        set_initialpose=args.set_initialpose,
+        settle_sec=args.settle_sec,
     )
     rospy.spin()
 

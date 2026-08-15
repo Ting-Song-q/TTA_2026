@@ -19,14 +19,14 @@ TebLocalPlannerROS:
     # EP 任务常有同线反向；YaLong 未写此项，保留较大倒车距离避免强制掉头
     max_backwards_dist: 3.0
 
-    # 运动相关（速度/加速度对齐 YaLong；横向为 EP 全向保留）
-    max_vel_x: 0.3
-    max_vel_x_backwards: 0.2
-    max_vel_y: 0.3
-    max_vel_theta: 0.8
-    acc_lim_x: 0.4
-    acc_lim_y: 0.5
-    acc_lim_theta: 0.8
+    # 运动相关：降速减轻麦克纳姆+AMCL 丢锁（原 YaLong 约 0.3；侧移保留）
+    max_vel_x: 0.15
+    max_vel_x_backwards: 0.12
+    max_vel_y: 0.15
+    max_vel_theta: 0.40
+    acc_lim_x: 0.25
+    acc_lim_y: 0.25
+    acc_lim_theta: 0.50
 
     min_turning_radius: 0.0
     wheelbase: 0.0

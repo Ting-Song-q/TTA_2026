@@ -1,0 +1,50 @@
+# SO-101 眼在手上：像素 → 基座三维（桌面平面假设）
+# 供 pixel_to_base.py / 手眼采集参考
+
+port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
+baud: 1000000
+
+camera:
+  index_or_path: /dev/video11
+  width: 640
+  height: 480
+  fps: 30
+  settle_frames: 8
+  frame_timeout_s: 5.0
+
+# 棋盘（与内参/手眼采集一致）
+checkerboard:
+  pattern: 8x6          # 内角点数
+  square_mm: 24.0
+
+# 内参 / 手眼结果（相对 tta/ 仓库根）
+# 2026-08-14 新摄像头内参: RMS≈0.56, fx≈531, fy≈532, cx≈306, cy≈240
+intrinsics: output/camera_calib/camera_intrinsics.yaml
+handeye: output/handeye_ee_cam.yaml
+
+# 场景几何（基座坐标系，单位米）
+scene:
+  table_z_m: 0.25
+  table_normal: [0.0, 0.0, 1.0]
+  block_size_m: [0.03, 0.03, 0.03]
+  grasp_height_mode: center   # center | top | table
+
+detector:
+  roi: [0.08, 0.15, 0.92, 0.92]
+  red_hsv:
+    lower1: [0, 75, 45]
+    upper1: [18, 255, 255]
+    lower2: [165, 75, 45]
+    upper2: [180, 255, 255]
+  red_rgb:
+    min_r: 95
+    min_r_minus_g: 28
+    min_r_minus_b: 22
+    max_g: 205
+  min_area: 500
+  min_rect_fill: 0.40
+  aspect_ratio_range: [0.35, 2.80]
+  open_kernel: 3
+  close_kernel: 5
+
+output_directory: output/pixel_to_base

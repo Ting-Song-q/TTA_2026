@@ -25,12 +25,12 @@ car:
 #   R3(0.0,-0.4) --- loading(3.6,-0.2) --- R1(7.2,-0.4)
 # 注意：PyYAML 1.1 会把裸键 y 解析成 True，坐标键请写成 "y"
 zones:
-  # changd start_finish → parking；车头朝取货区（+Y, yaw≈π/2）
-  parking: {x: 3.6, "y": 1.2, yaw: 1.57}
+  # 实车标定位姿（map）；车头朝取货区（+Y, yaw≈π/2）
+  parking: {x: 0.07, "y": 0.04, yaw: 1.57}
   # 北侧取货，车头朝 +Y
-  pickup:  {x: 3.6, "y": 2.6, yaw: 1.57}
+  pickup:  {x: 1.325, "y": -0.257, yaw: 1.57}
   # 南侧装货，车头朝 -Y
-  loading: {x: 3.6, "y": -0.2, yaw: -1.57}
+  loading: {x: -1.055, "y": 0.148, yaw: -1.57}
   rescue:
     # 左侧(R3/R4)朝内侧 +X；右侧(R1/R2)朝内侧 -X
     1: {x: 7.2, "y": -0.4, yaw: 3.14}
