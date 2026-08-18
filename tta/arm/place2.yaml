@@ -1,0 +1,104 @@
+# place2.py 专用：红色镂空框放置（与 reset_and_grasp.yaml 合并）
+
+poses:
+  place_observe:
+    shoulder_pan: 1944
+    shoulder_lift: 1891
+    elbow_flex: 1720
+    wrist_flex: 3007
+    wrist_roll: 1981
+    gripper: 910
+
+  # 开爪前：夹爪与地面平行
+  place_parallel:
+    shoulder_pan: 1987
+    shoulder_lift: 2647
+    elbow_flex: 1919
+    wrist_flex: 1670
+    wrist_roll: 1983
+
+grasp:
+  # 开环前伸（无 Tag 深度时用相机光轴方向）
+  forward_m: 0.080
+  z_offset_m: 0.000
+  left_m: 0.000
+  route_points: 4
+  final_forward_probe_m: 0.025
+  final_forward_route_points: 3
+  place_max_z_drop_m: 0.012
+  place_lock_wrist: true
+  # 实时伺服锁肘易导致原地踏步；朝前只锁腕即可
+  place_lock_elbow: false
+  place_max_lift_delta_ticks: 200
+  # 腕相机前伸后水平半径常 >280mm，放宽以免伺服整步跳过
+  max_horiz_m: 0.34
+
+  # 视觉伺服目标（参考 test2 x_center/y_center）
+  preclose_target_u_px: 320
+  preclose_target_v_px: 280
+  preclose_tol_u_px: 28
+  preclose_tol_v_px: 32
+  preclose_m_per_px: 0.00022
+  preclose_max_step_m: 0.020
+  preclose_iters: 8
+  place_live_loop_s: 0.08
+  place_live_timeout_s: 45.0
+  place_stable_frames: 3
+  place_live_preview: false
+  place_live_save_every: 5
+
+  # 已配置 place_parallel 时默认不再笛卡尔下降
+  place_descend_m: 0.0
+  place_descend_route_points: 4
+  # 开爪前：先 wrist_flex，再 shoulder_lift（分两步）
+  pre_open_wrist_flex_delta: -500
+  pre_open_shoulder_lift_delta: 300
+
+# 红色镂空框检测（字段同 grasp_vision/test2.py CFG）
+red_frame:
+  roi: [0.08, 0.18, 0.92, 0.66]
+  track_roi: [0.05, 0.12, 0.95, 0.72]
+  hsv_lower1: [0, 55, 35]
+  hsv_upper1: [20, 255, 255]
+  hsv_lower2: [160, 55, 35]
+  hsv_upper2: [180, 255, 255]
+  min_r: 80
+  min_r_minus_g: 20
+  min_r_minus_b: 15
+  max_g: 220
+  min_bbox_w: 28
+  min_bbox_h: 22
+  min_bbox_area: 900
+  min_outer_area: 200
+  min_ring_area: 80
+  min_hole_ratio: 0.12
+  max_ring_fill: 0.50
+  min_ring_fill: 0.04
+  max_interior_red: 0.48
+  min_border_red: 0.06
+  max_solid_interior: 0.75
+  thin_ring_fill_max: 0.40
+  aspect_min: 0.40
+  aspect_max: 3.20
+  min_center_v_norm: 0.16
+  max_center_v_norm: 0.62
+  table_v_norm_lo: 0.18
+  table_v_norm_hi: 0.55
+  prefer_table_weight: 1.20
+  prefer_midsize_area: 3500
+  prefer_square_weight: 0.25
+  prefer_hole_weight: 0.70
+  open_kernel: 2
+  close_kernel: 3
+  close_iters: 1
+  dilate_kernel: 7
+  dilate_iters: 2
+  track_min_bbox_w: 22
+  track_min_bbox_h: 16
+  track_min_bbox_area: 500
+  track_min_outer_area: 120
+  track_min_ring_area: 50
+  track_min_center_v_norm: 0.12
+  track_max_center_v_norm: 0.70
+  track_max_ring_fill: 0.55
+  track_aspect_max: 3.50

@@ -1,0 +1,22 @@
+# 从 vision_3d.yaml 注释恢复的近似内参（非原始标定完整备份）
+# 来源: 2026-08-14 新摄像头内参 RMS≈0.56, fx≈531, fy≈532, cx≈306, cy≈240
+# 注意: 聊天/仓库中未找到完整 dist_coeffs，畸变暂置 0；精确用途请重新 calibrate_camera.py
+camera: restored_from_vision_3d_comment
+image_width: 640
+image_height: 480
+pattern_cols: 8
+pattern_rows: 6
+square_mm: 24.0
+n_images: 0
+rms_px: 0.56
+camera_matrix:
+  - [531.0, 0.0, 306.0]
+  - [0.0, 532.0, 240.0]
+  - [0.0, 0.0, 1.0]
+dist_coeffs: [0.0, 0.0, 0.0, 0.0, 0.0]
+fx: 531.0
+fy: 532.0
+cx: 306.0
+cy: 240.0
+created_at: "20260814_restored"
+restored_note: "Approximate restore from vision_3d.yaml comment; distortion unknown (set to 0)."

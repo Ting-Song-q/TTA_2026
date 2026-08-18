@@ -6,6 +6,13 @@
   - timed.speed / timed.turn_speed
   - segment_motion.<段名>.duration_x / duration_y / duration_turn
 
+可选 obstacle_sidestep：出发前读雷达，前/后净空 < 阈值则：
+  - 前方有障：取货「左→走→右」；装货「左→走→再左」
+  - 仅后方有障：取货正常走；装货段先左移 0.4m → 正常行驶 → 再左移 0.4m
+
+装货区 → 救援点：出发前读横移方向净空；有障则：
+  后退 0.6m → 横移 → 前进 0.6m → 再继续 X/转向
+
 用法：
   python3 nav_rescue_2026_1.py --skip-drone --rescue 3
   python3 nav_rescue_2026_1.py --config nav_rescue_2026_1.yaml --skip-drone --rescue 3
@@ -21,12 +28,14 @@ from pathlib import Path
 import rospy
 import yaml
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
 
 _HERE = Path(__file__).resolve().parent
 _DEFAULT_CONFIG = _HERE / "nav_rescue_2026_1.yaml"
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+from laser_avoidance import get_clearances  # noqa: E402
 from rescue_protocol import (  # noqa: E402
     RescueOrder,
     notify_loading_done,
@@ -160,7 +169,16 @@ class TimedSpeedNav(object):
             self._est["yaw"] + direction * spd * duration
         )
 
-    def run_segment(self, body_x_sign, body_y_sign, yaw_delta_sign, seg):
+    def run_segment(
+        self,
+        body_x_sign,
+        body_y_sign,
+        yaw_delta_sign,
+        seg,
+        do_y=True,
+        do_x=True,
+        do_turn=True,
+    ):
         speed = float(seg.get("speed", self.speed))
         turn_speed = float(seg.get("turn_speed", self.turn_speed))
         dx_t = float(seg.get("duration_x", 0.0))
@@ -169,7 +187,8 @@ class TimedSpeedNav(object):
 
         rospy.loginfo(
             "%s segment speed=%.2f turn=%.2f "
-            "dur_x=%.2fs dur_y=%.2fs dur_turn=%.2fs signs=(x=%+.0f,y=%+.0f,yaw=%+.0f)",
+            "dur_x=%.2fs dur_y=%.2fs dur_turn=%.2fs signs=(x=%+.0f,y=%+.0f,yaw=%+.0f) "
+            "axes=(y=%s,x=%s,turn=%s)",
             self.log_prefix,
             speed,
             turn_speed,
@@ -179,28 +198,51 @@ class TimedSpeedNav(object):
             body_x_sign,
             body_y_sign,
             yaw_delta_sign,
+            do_y,
+            do_x,
+            do_turn,
         )
 
-        if dy_t > 1e-4 and abs(body_y_sign) > 1e-9:
+        if do_y and dy_t > 1e-4 and abs(body_y_sign) > 1e-9:
             self.go_linear_y_timed(
                 speed if body_y_sign > 0 else -speed, dy_t
             )
             if self.segment_pause_sec > 0:
                 rospy.sleep(self.segment_pause_sec)
 
-        if dx_t > 1e-4 and abs(body_x_sign) > 1e-9:
+        if do_x and dx_t > 1e-4 and abs(body_x_sign) > 1e-9:
             self.go_linear_x_timed(
                 speed if body_x_sign > 0 else -speed, dx_t
             )
             if self.segment_pause_sec > 0:
                 rospy.sleep(self.segment_pause_sec)
 
-        if dt_t > 1e-4 and abs(yaw_delta_sign) > 1e-9:
+        if do_turn and dt_t > 1e-4 and abs(yaw_delta_sign) > 1e-9:
             self.turn_ang_timed(
                 turn_speed, dt_t, direction=1 if yaw_delta_sign > 0 else -1
             )
             if self.segment_pause_sec > 0:
                 rospy.sleep(self.segment_pause_sec)
+
+    def go_linear_x_distance(self, distance, speed=None):
+        """车体前后平移固定距离：distance>0 前进，<0 后退。"""
+        dist = float(distance)
+        if abs(dist) < 1e-4:
+            return
+        spd = abs(float(speed if speed is not None else self.speed))
+        if spd < 1e-6:
+            return
+        duration = abs(dist) / spd
+        rospy.loginfo(
+            "%s linear_x_distance: dist=%+.3fm speed=%.3f duration=%.3fs",
+            self.log_prefix,
+            dist,
+            spd if dist > 0 else -spd,
+            duration,
+        )
+        self.go_linear_x_timed(spd if dist > 0 else -spd, duration)
+        if self.segment_pause_sec > 0:
+            rospy.sleep(self.segment_pause_sec)
 
     def run_backoff_x(self, seg):
         speed = abs(float(seg.get("speed", self.speed)))
@@ -208,6 +250,33 @@ class TimedSpeedNav(object):
         if dx_t < 1e-4:
             return
         self.go_linear_x_timed(-speed, dx_t)
+        if self.segment_pause_sec > 0:
+            rospy.sleep(self.segment_pause_sec)
+
+    def go_lateral_y(self, distance, speed=None):
+        """车体侧移：distance>0 表示任务语义「向左」，<0 表示「向右」。
+
+        实车 cmd_vel.linear.y 与常见 +Y=左 相反，此处对输出取反，
+        保证上层「左移用正距离、右移用负距离」与实车一致。
+        """
+        dist = float(distance)
+        if abs(dist) < 1e-4:
+            return
+        spd = abs(float(speed if speed is not None else self.speed))
+        if spd < 1e-6:
+            return
+        duration = abs(dist) / spd
+        # 语义左(+dist) → 发 -vy；语义右(-dist) → 发 +vy
+        signed_speed = -spd if dist > 0 else spd
+        rospy.loginfo(
+            "%s lateral_y: intent=%s dist=%+.3fm cmd_vy=%.3f duration=%.3fs",
+            self.log_prefix,
+            "left" if dist > 0 else "right",
+            dist,
+            signed_speed,
+            duration,
+        )
+        self.go_linear_y_timed(signed_speed, duration)
         if self.segment_pause_sec > 0:
             rospy.sleep(self.segment_pause_sec)
 
@@ -233,6 +302,11 @@ class NavTimed(object):
         self.mission_cfg = dict(self.config.get("mission") or {})
         self.segment_motion = dict(self.config.get("segment_motion") or {})
         self.arrive_pause_sec = float(timed.get("arrive_pause_sec", 0.50))
+        self.obstacle_cfg = dict(self.config.get("obstacle_sidestep") or {})
+        # none | front | back（出发前一次判定）
+        self._obstacle_mode = "none"
+        self._scan = None
+        self._scan_stamp = None
 
         speed = float(timed.get("speed", 0.3))
         turn_speed = float(timed.get("turn_speed", 0.5))
@@ -262,21 +336,168 @@ class NavTimed(object):
         self._current_zone = None
         self._current_zone_id = None
 
+        scan_topic = str(self.obstacle_cfg.get("scan_topic", "/scan"))
+        self._scan_sub = rospy.Subscriber(
+            scan_topic, LaserScan, self._on_scan, queue_size=1
+        )
+
         rospy.loginfo(
             "[Mission] nav_rescue_2026_1 | config=%s | skip_drone=%s "
-            "rescue=%s | speed=%.2f turn=%.2f",
+            "rescue=%s | speed=%.2f turn=%.2f | scan=%s",
             self.config_path,
             self.skip_drone,
             self.rescue_zone,
             speed,
             turn_speed,
+            scan_topic,
         )
         if autostart:
             ok = self.run_mission()
             rospy.loginfo("[Mission] 结束 ok=%s", ok)
 
+    def _on_scan(self, msg):
+        self._scan = msg
+        self._scan_stamp = rospy.Time.now().to_sec()
+
     def stop(self):
         self.nav.stop()
+
+    def _wait_scan(self, timeout):
+        timeout = max(0.0, float(timeout))
+        t0 = rospy.Time.now().to_sec()
+        rate = rospy.Rate(20)
+        while not rospy.is_shutdown():
+            if self._scan is not None:
+                return self._scan
+            if rospy.Time.now().to_sec() - t0 >= timeout:
+                return None
+            rate.sleep()
+        return None
+
+    def _decide_obstacle_mode(self):
+        """出发前读雷达：区分前方/后方 0.6m 内障碍。
+
+        返回:
+          - "front": 前方有障（若前后都有，优先前方）→ 取货/装货用原左右侧移
+          - "back":  仅后方有障 → 取货正常；装货左移→行驶→再左移
+          - "none":  无障或未启用/无激光
+        """
+        cfg = self.obstacle_cfg
+        if not cfg.get("enable", True):
+            rospy.loginfo("[Mission] obstacle_sidestep 已关闭")
+            return "none"
+
+        check_dist = float(cfg.get("check_distance", 0.6))
+        wait_timeout = float(cfg.get("scan_wait_timeout", 3.0))
+
+        scan = self._wait_scan(wait_timeout)
+        if scan is None:
+            rospy.logwarn(
+                "[Mission] 等待激光超时 %.1fs，视为无障碍",
+                wait_timeout,
+            )
+            return "none"
+
+        clearances = get_clearances(scan, self._laser_cfg())
+        front = float(clearances["front"])
+        back = float(clearances["back"])
+        front_hit = front < check_dist
+        back_hit = back < check_dist
+
+        if front_hit:
+            mode = "front"
+            action = "前方障碍→取货/装货左右侧移绕障"
+        elif back_hit:
+            mode = "back"
+            action = "后方障碍→取货直行；装货左移→行驶→再左移"
+        else:
+            mode = "none"
+            action = "通路畅通"
+
+        rospy.loginfo(
+            "[Mission] 雷达判障 front=%.3fm back=%.3fm thresh=%.3fm → %s (%s)",
+            front,
+            back,
+            check_dist,
+            mode,
+            action,
+        )
+        return mode
+
+    def _sidestep_speed(self):
+        cfg = self.obstacle_cfg
+        if "lateral_speed" in cfg and cfg.get("lateral_speed") is not None:
+            return abs(float(cfg["lateral_speed"]))
+        return abs(float(self.nav.speed))
+
+    def _sidestep_distance(self):
+        """前方障碍用的侧移距离（左出 / 右回）。"""
+        return abs(float(self.obstacle_cfg.get("lateral_distance", 0.5)))
+
+    def _rear_loading_lateral_distance(self):
+        """后方障碍时装货段侧移距离（默认 0.4m）。"""
+        return abs(
+            float(self.obstacle_cfg.get("rear_loading_lateral_distance", 0.4))
+        )
+
+    def _laser_cfg(self):
+        cfg = self.obstacle_cfg
+        return {
+            "lidar_mount": cfg.get("lidar_mount", "rear"),
+            "lidar_to_body": dict(cfg.get("lidar_to_body") or {}),
+            "sector_half_width": cfg.get("sector_half_width", 25),
+            "side_sector_half_width": cfg.get("side_sector_half_width", 55),
+            "self_hit_margin": cfg.get("self_hit_margin", 0.03),
+        }
+
+    def _check_rescue_lateral_obstacle(self, body_y_sign):
+        """装货→救援：判断即将横移的一侧是否有障碍。
+
+        body_y_sign>0 → 发 +vy，按 laser_avoidance 约定查左侧；
+        body_y_sign<0 → 发 -vy，查右侧。
+        """
+        cfg = self.obstacle_cfg
+        if not cfg.get("enable", True):
+            return False
+        if not cfg.get("rescue_lateral_check_enable", True):
+            rospy.loginfo("[Mission] rescue 横移判障已关闭")
+            return False
+        if abs(float(body_y_sign)) < 1e-9:
+            return False
+
+        wait_timeout = float(cfg.get("scan_wait_timeout", 3.0))
+        thresh = float(
+            cfg.get(
+                "rescue_lateral_check_distance",
+                cfg.get("check_distance", 0.6),
+            )
+        )
+        scan = self._wait_scan(wait_timeout)
+        if scan is None:
+            rospy.logwarn(
+                "[Mission] 救援横移判障：等待激光超时 %.1fs，视为无障碍",
+                wait_timeout,
+            )
+            return False
+
+        clearances = get_clearances(scan, self._laser_cfg())
+        # 与 run_segment / compute_bypass_twist 一致：+vy→left，-vy→right
+        side = "left" if body_y_sign > 0 else "right"
+        clearance = float(clearances[side])
+        hit = clearance < thresh
+        rospy.loginfo(
+            "[Mission] 救援横移判障 side=%s clear=%.3fm thresh=%.3fm → %s",
+            side,
+            clearance,
+            thresh,
+            "有障碍(后退再横移)" if hit else "畅通",
+        )
+        return hit
+
+    def _rescue_lateral_backoff_m(self):
+        return abs(
+            float(self.obstacle_cfg.get("rescue_lateral_backoff_m", 0.6))
+        )
 
     def _abort(self, reason):
         rospy.logerr("[Mission] abort: %s", reason)
@@ -340,11 +561,26 @@ class NavTimed(object):
         if not seg:
             return self._abort("配置缺少 segment_motion.%s" % key)
 
+        # 方向符号在侧移前按原航点差计算，避免侧移改变 signs 导致段时长语义漂移
         from_pose = self.nav.get_est_pose()
         sx, sy, st, body_x, body_y, dyaw = self._signs_from_poses(from_pose, pose)
+
+        mode = self._obstacle_mode
+        # front：取货/装货 左→走→右；back：仅装货 左→走→左；pickup 在 back 时直行
+        front_sidestep = mode == "front" and zone_name in ("pickup", "loading")
+        rear_loading = mode == "back" and zone_name == "loading"
+        dy_t = float(seg.get("duration_y", 0.0))
+        rescue_lateral_obs = (
+            zone_name == "rescue"
+            and dy_t > 1e-4
+            and abs(sy) > 1e-9
+            and self._check_rescue_lateral_obstacle(sy)
+        )
+
         rospy.loginfo(
             "[Mission] goto %s via %s (%.3f, %.3f, yaw=%.3f) "
-            "body≈(%.3f, %.3f) dyaw=%.1f°",
+            "body≈(%.3f, %.3f) dyaw=%.1f° obstacle_mode=%s "
+            "front_sidestep=%s rear_loading=%s rescue_lateral_obs=%s",
             label,
             key,
             pose["x"],
@@ -353,8 +589,69 @@ class NavTimed(object):
             body_x,
             body_y,
             math.degrees(dyaw),
+            mode,
+            front_sidestep,
+            rear_loading,
+            rescue_lateral_obs,
         )
-        self.nav.run_segment(sx, sy, st, seg)
+
+        spd = self._sidestep_speed()
+        if front_sidestep:
+            dist = self._sidestep_distance()
+            rospy.loginfo(
+                "[Mission] %s 前方绕障：先向左平移 %.2fm", label, dist
+            )
+            self.nav.go_lateral_y(+dist, speed=spd)
+        elif rear_loading:
+            dist = self._rear_loading_lateral_distance()
+            rospy.loginfo(
+                "[Mission] %s 后方绕障：先向左平移 %.2fm", label, dist
+            )
+            self.nav.go_lateral_y(+dist, speed=spd)
+
+        if rescue_lateral_obs:
+            back_m = self._rescue_lateral_backoff_m()
+            seg_speed = abs(float(seg.get("speed", self.nav.speed)))
+            rospy.loginfo(
+                "[Mission] %s 横移方向有障：先后退 %.2fm → 横移 → 前进 %.2fm → 再继续",
+                label,
+                back_m,
+                back_m,
+            )
+            self.nav.go_linear_x_distance(-back_m, speed=seg_speed)
+            self.nav.run_segment(
+                sx, sy, st, seg, do_y=True, do_x=False, do_turn=False
+            )
+            self.nav.go_linear_x_distance(+back_m, speed=seg_speed)
+            self.nav.run_segment(
+                sx, sy, st, seg, do_y=False, do_x=True, do_turn=True
+            )
+        else:
+            self.nav.run_segment(sx, sy, st, seg)
+
+        if front_sidestep:
+            dist = self._sidestep_distance()
+            if zone_name == "loading":
+                # 装货段含约 180° 转向：车体左右相对场地对调，到位后再左移才是回走廊
+                rospy.loginfo(
+                    "[Mission] %s 到位后向左平移 %.2fm（180°后仍用左移回正）",
+                    label,
+                    dist,
+                )
+                self.nav.go_lateral_y(+dist, speed=spd)
+            else:
+                # 取货：未掉头，右移回正
+                rospy.loginfo(
+                    "[Mission] %s 到位后向右平移 %.2fm", label, dist
+                )
+                self.nav.go_lateral_y(-dist, speed=spd)
+        elif rear_loading:
+            dist = self._rear_loading_lateral_distance()
+            rospy.loginfo(
+                "[Mission] %s 到位后再向左平移 %.2fm", label, dist
+            )
+            self.nav.go_lateral_y(+dist, speed=spd)
+
         self.nav.set_est_pose(pose)
         self._current_zone = zone_name
         self._current_zone_id = zone_id
@@ -367,6 +664,15 @@ class NavTimed(object):
         timeouts = self.config.get("timeouts", {})
         mission = self.mission_cfg
 
+        self._obstacle_mode = self._decide_obstacle_mode()
+        if self._obstacle_mode == "front":
+            rospy.logwarn(
+                "[Mission] 前方障碍：取货「左→走→右」；装货「左→走→左」"
+            )
+        elif self._obstacle_mode == "back":
+            rospy.logwarn(
+                "[Mission] 后方障碍：取货直行；装货区「左移→正常→再左移」"
+            )
 
         if not self.goto_zone("pickup"):
             return self._abort("无法到达取货区")
@@ -435,7 +741,7 @@ class NavTimed(object):
                 
 
 
-        if mission.get("pre_rescue_backoff_enable", True):
+        if mission.get("pre_rescue_backoff_enable", False):
             seg = self.segment_motion.get("pre_rescue_backoff")
             if seg:
                 rospy.loginfo(
@@ -446,6 +752,12 @@ class NavTimed(object):
                 self.nav.run_backoff_x(seg)
                 self.stop()
                 rospy.sleep(0.3)
+            else:
+                rospy.logwarn(
+                    "[Mission] pre_rescue_backoff_enable 但缺少 segment_motion.pre_rescue_backoff"
+                )
+        else:
+            rospy.loginfo("[Mission] 跳过前往救援区前的后退")
 
         if not self.goto_zone("rescue", zone_id=self.order.zone):
             return self._abort("无法到达救援区")

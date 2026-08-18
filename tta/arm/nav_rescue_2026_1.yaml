@@ -1,0 +1,189 @@
+# nav_rescue_2026_1 参数配置（转速 × 时间纯开环）
+# 配套脚本: nav_rescue_2026_1.py
+#
+# 【你主要改这两类】
+#   1) timed.speed / timed.turn_speed  —— 平移速度、旋转角速度
+#   2) segment_motion.*.duration_*    —— 每一段跑多久（秒）
+#
+# 运动模型（手动时间模式）:
+#   平移：以 speed 发 /cmd_vel，持续 duration_x / duration_y 秒
+#   旋转：以 turn_speed 发角速度，持续 duration_turn 秒
+# 方向由 zones 航点差的正负决定；时间完全由你填，不再用 距离/速度 自动算。
+
+# ---------------------------------------------------------------------------
+# 全局速度（可被某一航段覆盖）
+# ---------------------------------------------------------------------------
+timed:
+  # ★ 平移速度 m/s —— 自己设
+  speed: 0.3
+  # ★ 旋转角速度 rad/s —— 自己设
+  turn_speed: 0.5
+  # 控制环发布频率 (Hz)
+  control_rate: 100
+  cmd_vel_topic: "/cmd_vel"
+  # 面朝目标时，小于该角度(rad)则跳过旋转（仅 auto 转角时用）
+  yaw_skip_rad: 0.03
+  # 平移/转向段之间短停顿 (s)
+  segment_pause_sec: 0.30
+  # 到点后停车等待 (s)
+  arrive_pause_sec: 0.50
+
+# ---------------------------------------------------------------------------
+# ★ 各航段：速度(可选覆盖) + 时间(秒，必填/自设)
+# duration_x / duration_y / duration_turn = 0 表示该轴不动作
+# ---------------------------------------------------------------------------
+segment_motion:
+  # parking → pickup
+  to_pickup:
+    speed: 0.3
+    duration_x: 4.1
+    duration_y: 0.0
+    turn_speed: 0.5
+    duration_turn: 0.0
+
+  # pickup → loading
+  to_loading:
+    speed: 0.3
+    duration_x: 7.4      # ★ 自己设
+    duration_y: 0.0
+    turn_speed: 0.5
+    duration_turn: 6.28   # ★ 自己设（约转 180°：π/0.5）
+
+  # 去救援区前后退（车体 -X）
+  pre_rescue_backoff:
+    speed: 0.3
+    duration_x: 0.17      # ★ 自己设（约后退 5cm）
+    duration_y: 0.0
+    duration_turn: 0.0
+
+  # loading → rescue_1
+  to_rescue_1:
+    speed: 0.3
+    duration_x: 1.50      # ★ 自己设
+    duration_y: 10.7
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_rescue_2:
+    speed: 0.3
+    duration_x: 8.5
+    duration_y: 10.5
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_rescue_3:
+    speed: 0.3
+    duration_x: 9.00
+    duration_y: 10.0
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_rescue_4:
+    speed: 0.3
+    duration_x: 1.50
+    duration_y: 11.2
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  # rescue_N → parking（不同救援点返回参数各自独立，★ 自己设）
+  to_parking_1:
+    speed: 0.3
+    duration_x: 11.00
+    duration_y: 4.00
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_parking_2:
+    speed: 0.3
+    duration_x: 10.80
+    duration_y: 5.00
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_parking_3:
+    speed: 0.3
+    duration_x: 10.00
+    duration_y: 5.50
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+  to_parking_4:
+    speed: 0.3
+    duration_x: 11.5
+    duration_y: 4.00
+    turn_speed: 0.5
+    duration_turn: 3.14
+
+# ---------------------------------------------------------------------------
+# 任务节拍（停顿时间，秒）—— 也由你设
+# ---------------------------------------------------------------------------
+mission:
+  pickup_hold_sec: 3.0
+  skip_drone_loading_hold_sec: 3.0
+  skip_drone_unload_hold_sec: 3.0
+  loading_hold_sec: 3.0
+  unload_hold_sec: 3.0
+  # 是否启用 pre_rescue_backoff 段（时间见 segment_motion）
+  pre_rescue_backoff_enable: true
+
+# ---------------------------------------------------------------------------
+# 出发前雷达判障（前/后净空 < check_distance）
+#   - 前方有障：pickup「左移 → 正常前进 → 右移」；
+#              loading「左移 → 正常（含约180°转）→ 再左移」
+#              （掉头后车体左右对调，第二次仍发左移才相当于场地回正）
+#   - 仅后方有障：pickup 直行；loading「左移 → 正常 → 再左移」
+#   - 前后都有：按前方处理
+# ---------------------------------------------------------------------------
+obstacle_sidestep:
+  enable: true
+  scan_topic: "/scan"
+  # 等待首帧激光超时 (s)；超时则视为无障碍并继续
+  scan_wait_timeout: 3.0
+  # 车体前/后净空阈值 (m)
+  check_distance: 0.6
+  # 前方障碍侧移距离 (m)：+Y=左，到位后 -Y=右回正
+  lateral_distance: 0.5
+  # 仅后方障碍时装货段侧移距离 (m)，两次均向左
+  rear_loading_lateral_distance: 0.4
+  # 侧移速度 (m/s)；缺省用 timed.speed
+  lateral_speed: 0.3
+  # 雷达安装：rear 与 rmep_base / mission_config 一致（0°=车尾）
+  lidar_mount: rear
+  lidar_to_body:
+    front: 0.12
+    back: 0.31
+    left: 0.25
+    right: 0.25
+  sector_half_width: 25
+  side_sector_half_width: 55
+  self_hit_margin: 0.03
+
+# ---------------------------------------------------------------------------
+# 航点：只决定“往哪边走”（正负方向）；走多久看上面 segment_motion
+# PyYAML 请写 "y"，不要写裸键 y
+# ---------------------------------------------------------------------------
+# zones:
+#   parking: {x: 0.0, "y": 0.0, yaw: 0.0}
+#   pickup:  {x: 0.28, "y": 0.0, yaw: 0.0}
+#   loading: {x: -0.23, "y": 0.0, yaw: 3.14}
+#   rescue:
+#     1: {x: -0.38, "y": 0.65, yaw: 1.57}
+#     2: {x: 0.45, "y": 0.70, yaw: 1.57}
+#     3: {x: 0.40, "y": -0.68, yaw: -1.57}
+#     4: {x: -0.38, "y": -0.75, yaw: -1.57}
+
+# ---------------------------------------------------------------------------
+# 无人机通讯（仅非 --skip-drone）
+# ---------------------------------------------------------------------------
+comm:
+  drone_host: "192.168.10.66"
+  drone_user: "forlinx"
+  drone_password: "forlinx"
+  rescue_target_path: "/mnt/rescue_target.flag"
+  loading_done_path: "/mnt/loading_done.flag"
+  delivery_done_path: "/mnt/delivery_done.flag"
+  unload_done_path: "/mnt/unload_done.flag"
+
+timeouts:
+  wait_drone_cmd: 600
+  delivery: 600

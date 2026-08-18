@@ -1,18 +1,18 @@
-# SO-101 视觉指导抓取（原始 ticks）
-# 流程: initial → grasp观察位 → 视觉伺服对准 → pregrasp → insert → 闭爪
-#       → retreat → place → initial
-#
-# 三维场景参数见 vision_3d.yaml；pixel_to_base.py 用那份配置。
+# SO-101：初始位 → 观察位 → 识别红块 → IK 抓取 → 保持
+# python3 og.py --yes
 
 port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
 baud: 1000000
 
-# 基座系场景（米）：桌面高 25cm，红块 3cm 立方体
+# 基座系场景（米）
 scene:
   table_z_m: 0.25
   table_normal: [0.0, 0.0, 1.0]
   block_size_m: [0.03, 0.03, 0.03]
   grasp_height_mode: center
+
+intrinsics: output/camera_calib/camera_intrinsics.yaml
+handeye: output/handeye_ee_cam.yaml
 
 motion:
   step_ticks: 40
@@ -36,12 +36,14 @@ camera:
   settle_frames: 8
   frame_timeout_s: 5.0
 
-vision:
-  enabled: true
-  detect_on_arrive: true
-  # 观察位红块约在 v≈190；原先 395 会造成巨大垂直误差并顶满步进
-  desired_center: [320, 200]
-  output_directory: output/og_grasp_vision
+grasp3d:
+  gripper_open: 1200
+  gripper_close: 2100
+  approach_z_m: 0.08
+  ee_z_offset_m: 0.04
+  ik_tol_m: 0.012
+  max_horiz_m: 0.28
+  close_settle_s: 0.85
 
 detector:
   roi: [0.08, 0.15, 0.92, 0.92]
@@ -61,58 +63,6 @@ detector:
   open_kernel: 3
   close_kernel: 5
 
-auto_grasp:
-  enabled: true
-  run_after_align: true
-  go_place_after: true
-  return_initial: true
-
-  gripper_open: 1200
-  gripper_close: 2100
-
-  # 现场日志显示正增益发散，符号已取反；步长减小以免冲出视野
-  pan_ticks_per_pixel: -0.35
-  reach_ticks_per_pixel: -0.25
-  max_joint_step_ticks: 20
-  pixel_deadband: [22, 28]
-  max_align_iters: 40
-  stable_frames: 3
-  loop_hz: 5.0
-  align_step_s: 0.10
-
-  # 误差范数连续变大则中止
-  diverge_abort_frames: 4
-  diverge_err_grow: 1.15
-
-  pan_limits: [1600, 2500]
-  reach_limits: [-250, 250]
-  reach_elbow_scale: 0.8
-  reach_lift_scale: -0.35
-
-  pregrasp_delta:
-    shoulder_pan: 0
-    shoulder_lift: -25
-    elbow_flex: 30
-    wrist_flex: 10
-    wrist_roll: 0
-  insert_delta:
-    shoulder_pan: 0
-    shoulder_lift: -55
-    elbow_flex: 55
-    wrist_flex: 20
-    wrist_roll: 0
-  retreat_delta:
-    shoulder_pan: 0
-    shoulder_lift: 80
-    elbow_flex: -45
-    wrist_flex: -15
-    wrist_roll: 0
-
-  pregrasp_settle_s: 0.8
-  insert_settle_s: 1.0
-  close_settle_s: 0.85
-  retreat_settle_s: 0.8
-
 poses:
   initial:
     shoulder_pan: 2052
@@ -120,9 +70,9 @@ poses:
     elbow_flex: 2057
     wrist_flex: 3137
     wrist_roll: 2104
-    gripper: 1694
+    gripper: 1300
 
-
+  # 观察位（看红块）
   grasp:
     shoulder_pan: 2053
     shoulder_lift: 1846
@@ -130,12 +80,3 @@ poses:
     wrist_flex: 3325
     wrist_roll: 2003
     gripper: 1262
-
-
-  place:
-    shoulder_pan: 1934
-    shoulder_lift: 860
-    elbow_flex: 2994
-    wrist_flex: 850
-    wrist_roll: 2057
-    gripper: 1200

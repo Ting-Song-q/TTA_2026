@@ -123,8 +123,48 @@ mission:
   skip_drone_unload_hold_sec: 3.0
   loading_hold_sec: 3.0
   unload_hold_sec: 3.0
-  # 是否启用 pre_rescue_backoff 段（时间见 segment_motion）
-  pre_rescue_backoff_enable: true
+  # 是否启用前往救援区前的后退段（已关闭）
+  pre_rescue_backoff_enable: false
+
+# ---------------------------------------------------------------------------
+# 出发前雷达判障（前/后净空 < check_distance）
+#   - 前方有障：pickup「左移 → 正常前进 → 右移」；
+#              loading「左移 → 正常（含约180°转）→ 再左移」
+#              （掉头后车体左右对调，第二次仍发左移才相当于场地回正）
+#   - 仅后方有障：pickup 直行；loading「左移 → 正常 → 再左移」
+#   - 前后都有：按前方处理
+#   - 装货→救援：横移方向净空 < rescue_lateral_check_distance 时
+#              「后退 rescue_lateral_backoff_m → 横移 → 前进同距 → 再 X/转向」
+# ---------------------------------------------------------------------------
+obstacle_sidestep:
+  enable: true
+  scan_topic: "/scan"
+  # 等待首帧激光超时 (s)；超时则视为无障碍并继续
+  scan_wait_timeout: 3.0
+  # 车体前/后净空阈值 (m)
+  check_distance: 0.6
+  # 前方障碍侧移距离 (m)：任务语义「左/右」（实车 y 在 go_lateral_y 中已取反）
+  lateral_distance: 0.5
+  # 仅后方障碍时装货段侧移距离 (m)，两次均为任务语义「左」
+  rear_loading_lateral_distance: 0.4
+  # 侧移速度 (m/s)；缺省用 timed.speed
+  lateral_speed: 0.3
+  # 装货→救援：是否启用横移方向判障
+  rescue_lateral_check_enable: true
+  # 横移方向净空阈值 (m)；缺省同 check_distance
+  rescue_lateral_check_distance: 0.6
+  # 横移有障时：先后退、横移后再前进的距离 (m)
+  rescue_lateral_backoff_m: 0.6
+  # 雷达安装：rear 与 rmep_base / mission_config 一致（0°=车尾）
+  lidar_mount: rear
+  lidar_to_body:
+    front: 0.30
+    back: 0.20
+    left: 0.25
+    right: 0.25
+  sector_half_width: 25
+  side_sector_half_width: 55
+  self_hit_margin: 0.03
 
 # ---------------------------------------------------------------------------
 # 航点：只决定“往哪边走”（正负方向）；走多久看上面 segment_motion

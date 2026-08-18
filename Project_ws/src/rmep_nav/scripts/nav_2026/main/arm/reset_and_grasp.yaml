@@ -1,0 +1,133 @@
+# SO-101 一键流程：当前位姿 -> grasp(观察位) -> 视觉闭环抓取
+# 执行：python3 arm/reset_and_grasp.py --yes
+
+port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
+baud: 1000000
+
+# 固定阶段的执行顺序与停顿时间。
+sequence:
+  # 串口可打开但某次握手未读到舵机时，最多总尝试次数及重试间隔。
+  connect_max_attempts: 5
+  connect_retry_s: 0.8
+  # 已处于安全起始区域时，直接到观察位，跳过 initial 可节省一次完整关节运动。
+  # 若机械臂起始姿态不确定或需要安全复位，改回 true。
+  move_to_initial: false
+  # 默认同步驱动全部关节；需要按舵机 ID 1→6 逐个复位时改为 ascending。
+  # joint_order: ascending
+  initial_hold_s: 0.0
+  move_to_observe: true
+  observe_hold_s: 0.25
+
+# 关节运动参数。step_ticks / step_s 决定复位与观察位切换的速度。
+motion:
+  # 快速但仍保留逐步反馈：从 30 ticks/80 ms 提升到 50 ticks/50 ms。
+  step_ticks: 50
+  step_s: 0.04
+  settle_s: 0.12
+  hold_hz: 10.0
+  arrive_tol_ticks: 8
+  joint_limits:
+    shoulder_pan: [600, 3400]
+    shoulder_lift: [600, 3400]
+    elbow_flex: [600, 3400]
+    wrist_flex: [600, 3400]
+    wrist_roll: [600, 3400]
+    gripper: [600, 2400]
+
+# 初始位和相机观察位；单位均为舵机原始 ticks。
+poses:
+  initial:
+    shoulder_pan: 2052
+    shoulder_lift: 963
+    elbow_flex: 2057
+    wrist_flex: 3137
+    wrist_roll: 2104
+    gripper: 1262
+  grasp:
+    shoulder_pan: 1997
+    shoulder_lift: 1249
+    elbow_flex: 2369
+    wrist_flex: 2750
+    wrist_roll: 1991
+    gripper: 1427
+
+
+# 场景、标定和相机。路径相对项目根目录。
+scene:
+  table_z_m: 0.25
+  table_normal: [0.0, 0.0, 1.0]
+  block_size_m: [0.03, 0.03, 0.03]
+  grasp_height_mode: center
+intrinsics: output/camera_calib/camera_intrinsics.yaml
+handeye: output/handeye_ee_cam.yaml
+camera:
+  index_or_path: /dev/video11
+  width: 640
+  height: 480
+  fps: 30
+  settle_frames: 2
+  frame_timeout_s: 5.0
+
+# 红色方块检测参数。
+detector:
+  roi: [0.08, 0.15, 0.92, 0.92]
+  red_hsv:
+    lower1: [0, 75, 45]
+    upper1: [18, 255, 255]
+    lower2: [165, 75, 45]
+    upper2: [180, 255, 255]
+  red_rgb:
+    min_r: 95
+    min_r_minus_g: 28
+    min_r_minus_b: 22
+    max_g: 205
+  min_area: 500
+  min_rect_fill: 0.40
+  aspect_ratio_range: [0.35, 2.80]
+  open_kernel: 3
+  close_kernel: 5
+
+# grasp_from_observe.py 的全部运行参数。
+grasp:
+  ik_tol_m: 0.012
+  max_horiz_m: 0.28
+  # 主动前进距离（米）。
+  route_points: 3
+  allow_partial_ik: false
+
+  # forward：视觉仅决定方向，距离由 forward_m 固定；vision：使用完整视觉测距。
+  range_mode: forward
+  forward_m: 0.040
+  z_offset_m: 0.000
+  left_m: 0.005
+  retry_forward_compensation_m: 0.010
+  retry_forward_route_points: 2
+  final_forward_probe_m: 0.025
+  final_forward_route_points: 3
+  preclose_fail_forward_m: 0.030
+  retry_open_settle_s: 0.15
+  preclose_settle_s: 0.08
+  close_settle_s: 0.50
+
+  gripper_open: 1200
+  gripper_close: 800
+  open_gripper_before_plan: false
+
+  save_images: true
+  save_dir: output/reset_and_grasp
+  preclose_check: true
+  preclose_iters: 4
+  preclose_target_u_px: 420
+  preclose_target_v_px: 360
+  preclose_tol_u_px: 150
+  preclose_tol_v_px: 35
+  preclose_m_per_px: 0.00010
+  preclose_max_step_m: 0.006
+  preclose_min_area_px: 800
+  preclose_max_area_px: 120000
+
+  miss_tol_ticks: 50
+  retries: 3
+  close_even_if_ungraspable: false
+  return_to_observe_after_grasp: true
+  release_torque_on_exit: false

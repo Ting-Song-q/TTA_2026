@@ -1,0 +1,67 @@
+﻿============================================================
+模拟 nav_rescue_2026_1 | rescue=2 | obstacle=True | speed_up=100x
+config: D:\code\tta\Project_ws\src\rmep_nav\scripts\nav_2026\nav_rescue_2026_1.yaml
+============================================================
+[sim] rospy.init_node(nav_rescue_2026_timed)
+[INFO] [TimedNav] ready cmd_vel=/cmd_vel speed=0.30 turn=0.50 (转速×时间，时间由配置指定)
+[INFO] [Mission] nav_rescue_2026_1 | config=D:\code\tta\Project_ws\src\rmep_nav\scripts\nav_2026\nav_rescue_2026_1.yaml | skip_drone=True rescue=2 | speed=0.30 turn=0.50 | scan=/scan
+[INFO] [Mission] 雷达判障 front=0.380m back=7.690m thresh=0.600m → 侧移绕障
+[WARN] [Mission] 前/后方障碍：取货区与装货区将「左移→正常→右移」
+[INFO] [Mission] goto pickup via to_pickup (0.280, 0.000, yaw=0.000) body≈(0.280, 0.000) dyaw=0.0° sidestep=True
+[INFO] [Mission] pickup 前先向左平移 0.50m
+[INFO] [TimedNav] lateral_y: dist=+0.500m speed=0.300 duration=1.667s
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=0.300 wz=0.000 duration=1.667s
+[INFO] [TimedNav] segment speed=0.30 turn=0.50 dur_x=4.10s dur_y=0.00s dur_turn=0.00s signs=(x=+1,y=+0,yaw=+0)
+[INFO] [TimedNav] go_linear_x: vx=0.300 vy=0.000 wz=0.000 duration=4.100s
+[INFO] [Mission] pickup 到位后向右平移 0.50m
+[INFO] [TimedNav] lateral_y: dist=-0.500m speed=-0.300 duration=1.667s
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=-0.300 wz=0.000 duration=1.667s
+[INFO] [Mission] 取货区等待 3.0s
+[WARN] [Mission] vision_grasp stub bypass
+[INFO] [Mission] goto loading via to_loading (-0.230, 0.000, yaw=3.140) body≈(-0.510, 0.000) dyaw=179.9° sidestep=True
+[INFO] [Mission] loading 前先向左平移 0.50m
+[INFO] [TimedNav] lateral_y: dist=+0.500m speed=0.300 duration=1.667s
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=0.300 wz=0.000 duration=1.667s
+[INFO] [TimedNav] segment speed=0.30 turn=0.50 dur_x=7.40s dur_y=0.00s dur_turn=6.28s signs=(x=-1,y=+0,yaw=+1)
+[INFO] [TimedNav] go_linear_x: vx=-0.300 vy=0.000 wz=0.000 duration=7.400s
+[INFO] [TimedNav] turn_ang: vx=0.000 vy=0.000 wz=-0.500 duration=6.280s
+[INFO] [Mission] loading 到位后向右平移 0.50m
+[INFO] [TimedNav] lateral_y: dist=-0.500m speed=-0.300 duration=1.667s
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=-0.300 wz=0.000 duration=1.667s
+[INFO] [Mission] 跳过无人机，救援区 zone=2
+[INFO] [Mission] 跳过无人机：装货区保持 3.0s
+[INFO] [Mission] 前往救援区前后退 duration_x=0.17s speed=0.30
+[INFO] [TimedNav] go_linear_x: vx=-0.300 vy=0.000 wz=0.000 duration=0.170s
+[INFO] [Mission] goto rescue_2 via to_rescue_2 (0.450, 0.700, yaw=1.570) body≈(-0.628, -0.701) dyaw=-90.0° sidestep=False
+[INFO] [TimedNav] segment speed=0.30 turn=0.50 dur_x=8.50s dur_y=10.50s dur_turn=3.14s signs=(x=-1,y=-1,yaw=-1)
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=-0.300 wz=0.000 duration=10.500s
+[INFO] [TimedNav] go_linear_x: vx=-0.300 vy=0.000 wz=0.000 duration=8.500s
+[INFO] [TimedNav] turn_ang: vx=0.000 vy=0.000 wz=0.500 duration=3.140s
+[INFO] [Mission] 跳过无人机：救援区保持 3.0s
+[INFO] [Mission] goto parking(from_rescue_2) via to_parking_2 (0.000, 0.000, yaw=0.000) body≈(-0.700, 0.449) dyaw=-90.0° sidestep=False
+[INFO] [TimedNav] segment speed=0.30 turn=0.50 dur_x=10.80s dur_y=5.00s dur_turn=3.14s signs=(x=-1,y=+1,yaw=-1)
+[INFO] [TimedNav] go_linear_y: vx=0.000 vy=0.300 wz=0.000 duration=5.000s
+[INFO] [TimedNav] go_linear_x: vx=-0.300 vy=0.000 wz=0.000 duration=10.800s
+[INFO] [TimedNav] turn_ang: vx=0.000 vy=0.000 wz=0.500 duration=3.140s
+[INFO] [Mission] 全部任务完成（转速×时间版）
+[INFO] [Mission] 结束 ok=True
+
+============================================================
+运动段摘要（合并后的 cmd_vel，仿真时间）
+============================================================
+ 1) t=3.5s  dur≈1.65s  vx=+0.000 vy=+0.300 wz=+0.000
+ 2) t=5.6s  dur≈4.06s  vx=+0.300 vy=+0.000 wz=+0.000
+ 3) t=10.0s  dur≈1.65s  vx=+0.000 vy=-0.300 wz=+0.000
+ 4) t=15.6s  dur≈1.64s  vx=+0.000 vy=+0.300 wz=+0.000
+ 5) t=17.7s  dur≈7.39s  vx=-0.300 vy=+0.000 wz=+0.000
+ 6) t=25.4s  dur≈6.29s  vx=+0.000 vy=+0.000 wz=-0.500
+ 7) t=32.1s  dur≈1.65s  vx=+0.000 vy=-0.300 wz=+0.000
+ 8) t=37.7s  dur≈0.17s  vx=-0.300 vy=+0.000 wz=+0.000
+ 9) t=38.6s  dur≈10.48s  vx=+0.000 vy=-0.300 wz=+0.000
+10) t=49.5s  dur≈8.49s  vx=-0.300 vy=+0.000 wz=+0.000
+11) t=58.4s  dur≈3.11s  vx=+0.000 vy=+0.000 wz=+0.500
+12) t=65.5s  dur≈4.96s  vx=+0.000 vy=+0.300 wz=+0.000
+13) t=70.8s  dur≈10.79s  vx=-0.300 vy=+0.000 wz=+0.000
+14) t=82.0s  dur≈3.13s  vx=+0.000 vy=+0.000 wz=+0.500
+
+完成: need_sidestep=True | 发布次数=1249 | 运动段=14 | 仿真时长≈86.1s | 墙钟0.8s

@@ -1,0 +1,51 @@
+# place_apriltag.py 专用配置（与 reset_and_grasp.yaml 合并；后者不被改动）
+
+# 覆盖握手重试：夹爪掉线后可在重试窗口内上电恢复
+sequence:
+  connect_max_attempts: 8
+  connect_retry_s: 1.5
+
+poses:
+  # 仅臂关节；夹爪在进入观察位时保持当前实际 ticks，不在此填写/改写
+  place_observe:
+    shoulder_pan: 1998
+    shoulder_lift: 1690
+    elbow_flex: 1868
+    wrist_flex: 3025
+    wrist_roll: 2101
+
+grasp:
+  range_mode: forward
+  # 粗接近水平前伸（此前 40mm 偏短）
+  forward_m: 0.090
+  z_offset_m: 0.000
+  left_m: 0.000
+  route_points: 4
+  # 对准后再沿记录方向补一段前探
+  final_forward_probe_m: 0.030
+  final_forward_route_points: 3
+  # 相对视觉 Tag 保留距离（过大则几乎不靠近；视觉约 27cm 时 standoff=22cm 只剩几厘米）
+  place_standoff_m: 0.12
+  # 实时伺服中若 Z 已下降超过该值，结束引导并进入开爪（不再回退）
+  place_max_z_drop_m: 0.012
+  place_lock_wrist: true
+  place_lock_elbow: true
+  place_max_lift_delta_ticks: 40
+
+  # 实时视觉伺服（边运动边取最新帧）
+  preclose_target_u_px: 320
+  preclose_target_v_px: 360
+  preclose_tol_u_px: 30
+  preclose_tol_v_px: 40
+  preclose_m_per_px: 0.00018
+  preclose_max_step_m: 0.015
+  preclose_iters: 8
+  place_live_loop_s: 0.05
+  place_live_timeout_s: 45.0
+  place_stable_frames: 3
+  place_live_preview: false
+  place_live_save_every: 5
+
+  # 对准完成后：先竖直下降再开爪（米）
+  place_descend_m: 0.030
+  place_descend_route_points: 4

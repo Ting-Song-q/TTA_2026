@@ -1,0 +1,127 @@
+# grasp1：红色物块抓取
+# 观察位 / 抓取行程参数取自 place_apriltag.yaml；
+# 红块视觉检测与流程同 reset_and_grasp → grasp_from_observe.py
+#
+# 用法：
+#   python3 grasp1.py --yes
+
+port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
+baud: 1000000
+
+sequence:
+  connect_max_attempts: 5
+  connect_retry_s: 0.8
+  move_to_initial: false
+  initial_hold_s: 0.0
+  move_to_observe: true
+  observe_hold_s: 0.25
+
+motion:
+  step_ticks: 50
+  step_s: 0.04
+  settle_s: 0.12
+  hold_hz: 10.0
+  arrive_tol_ticks: 8
+  joint_limits:
+    shoulder_pan: [600, 3400]
+    shoulder_lift: [600, 3400]
+    elbow_flex: [600, 3400]
+    wrist_flex: [600, 3400]
+    wrist_roll: [600, 3400]
+    gripper: [600, 2400]
+
+# 观察位 = place_apriltag poses.place_observe（臂姿）
+# gripper 用张开值，便于抓取（place 配置里 796 为持块闭爪）
+poses:
+  initial:
+    shoulder_pan: 2052
+    shoulder_lift: 963
+    elbow_flex: 2057
+    wrist_flex: 3137
+    wrist_roll: 2104
+    gripper: 1262
+  grasp:
+    shoulder_pan: 1980
+    shoulder_lift: 1876
+    elbow_flex: 1721
+    wrist_flex: 2982
+    wrist_roll: 1981
+    gripper: 1200
+
+scene:
+  table_z_m: 0.25
+  table_normal: [0.0, 0.0, 1.0]
+  block_size_m: [0.03, 0.03, 0.03]
+  grasp_height_mode: center
+intrinsics: output/camera_calib/camera_intrinsics.yaml
+handeye: output/handeye_ee_cam.yaml
+camera:
+  index_or_path: /dev/video11
+  width: 640
+  height: 480
+  fps: 30
+  settle_frames: 2
+  frame_timeout_s: 5.0
+
+# 红色方块检测（同 reset_and_grasp.yaml）
+detector:
+  roi: [0.08, 0.15, 0.92, 0.92]
+  red_hsv:
+    lower1: [0, 75, 45]
+    upper1: [18, 255, 255]
+    lower2: [165, 75, 45]
+    upper2: [180, 255, 255]
+  red_rgb:
+    min_r: 95
+    min_r_minus_g: 28
+    min_r_minus_b: 22
+    max_g: 205
+  min_area: 500
+  min_rect_fill: 0.40
+  aspect_ratio_range: [0.35, 2.80]
+  open_kernel: 3
+  close_kernel: 5
+
+# 抓取行程：对齐 place_apriltag.yaml 的 grasp 参数
+grasp:
+  ik_tol_m: 0.012
+  max_horiz_m: 0.34
+  route_points: 4
+  allow_partial_ik: false
+
+  range_mode: forward
+  forward_m: 0.090
+  z_offset_m: 0.000
+  left_m: 0.000
+  retry_forward_compensation_m: 0.010
+  retry_forward_route_points: 2
+  final_forward_probe_m: 0.030
+  final_forward_route_points: 3
+  preclose_fail_forward_m: 0.030
+  retry_open_settle_s: 0.15
+  preclose_settle_s: 0.08
+  close_settle_s: 0.50
+
+  gripper_open: 1200
+  gripper_close: 800
+  open_gripper_before_plan: false
+
+  save_images: true
+  save_dir: output/grasp1
+  preclose_check: true
+  preclose_iters: 8
+  preclose_target_u_px: 320
+  preclose_target_v_px: 360
+  preclose_tol_u_px: 30
+  preclose_tol_v_px: 40
+  preclose_m_per_px: 0.00018
+  preclose_max_step_m: 0.015
+  preclose_min_area_px: 800
+  preclose_max_area_px: 120000
+
+  miss_tol_ticks: 50
+  # 同 reset_and_grasp：对准失败 → 前探重试；用尽 retries 后强制闭爪
+  retries: 3
+  close_even_if_ungraspable: false
+  return_to_observe_after_grasp: true
+  release_torque_on_exit: false

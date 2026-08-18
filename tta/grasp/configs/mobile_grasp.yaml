@@ -1,0 +1,194 @@
+# 机械臂串口与退出行为。
+port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61032896-if00
+baud: 1000000
+# true 会在流程结束时关闭机械臂力矩；携物时通常保持 false。
+release_torque_on_exit: false
+
+sequence:
+  # true 时先去 initial，再去 grasp 观察位。
+  move_to_initial: false
+  # 串口握手失败时的最大连接次数和重试间隔，单位 s。
+  connect_max_attempts: 5
+  connect_retry_s: 0.8
+
+# 每次真实运行都会清空该目录，并用固定阶段名覆盖保存调试图。
+debug:
+  enabled: true
+  directory: grasp/debug
+
+# 小车开环控制。距离由 速度 x 时间 换算，需按现场标定。
+mobile_base:
+  node_name: mobile_grasp
+  # ROS Noetic 节点使用 EVA 系统 Python，不使用 lerobot 的 Python 3.12。
+  ros_python: /usr/bin/python3
+  ros_cmd_helper: grasp/ros_cmd_vel.py
+  # 底盘速度控制话题。
+  cmd_vel_topic: /cmd_vel
+  control_rate_hz: 50
+  # 小车进入隔板层前后的前进/后退速度，单位 m/s。
+  forward_speed_mps: 0.1
+  backward_speed_mps: 0.1
+  # 抓取观察位后先前进 10 cm，完成左右校准后再前进 10 cm。
+  approach_before_align_m: 0.08
+  approach_after_align_m: 0.06
+
+# 只移动小车、不移动机械臂的左右视觉校准。
+base_alignment:
+  # 红块中心期望位于图像宽度的 55% 处。
+  target_u_ratio: 0.55
+  # 红块中心与目标线的允许水平误差，单位像素。
+  tolerance_px: 60
+  # 未校准成功时不再进入隔板或执行抓取，先后退回安全位置。
+  require_success: true
+  # 最多拍照并校准的次数；未成功也会继续后续前进和抓取。
+  max_iters: 5
+  # 横移固定速度，单位 m/s；每次移动时长随像素误差变化。
+  lateral_speed_mps: 0.3
+  # 达到该理论误差时使用最长运动脉冲；更大的误差也保持最长时长，单位像素。
+  max_error_px: 240
+  # 单次横移脉冲时长的下限/上限，单位 s；在容差到 max_error_px 之间线性插值。
+  min_lateral_duration_s: 0.05
+  max_lateral_duration_s: 0.20
+  # 方向系数：当前实测 error<0 应发送 vy<0，因此保持为 +1。
+  lateral_direction_sign: 1.0
+  # 连续横移后红块中心变化不足该值，判为小车横移未生效并中止。
+  min_response_px: 3.0
+  max_no_response_iters: 2
+  # 侧移后等待车身和画面稳定的时间，单位 s。
+  settle_s: 0.20
+
+# 机械臂关节插值与限位。ticks 为 Feetech 原始编码器值。
+motion:
+  # 单个插值步的最大关节变化和步间等待，控制机械臂速度。
+  step_ticks: 50
+  step_s: 0.04
+  # 每个目标位姿到达后额外稳定时间，单位 s。
+  settle_s: 0.12
+  hold_hz: 10.0
+  arrive_tol_ticks: 8
+  joint_limits:
+    shoulder_pan: [600, 3400]
+    shoulder_lift: [600, 3400]
+    elbow_flex: [600, 3400]
+    wrist_flex: [600, 3400]
+    wrist_roll: [600, 3400]
+    gripper: [600, 2400]
+
+poses:
+  # 可选安全中转位；由 sequence.move_to_initial 控制是否使用。
+  initial:
+    shoulder_pan: 2052
+    shoulder_lift: 963
+    elbow_flex: 2057
+    wrist_flex: 3137
+    wrist_roll: 2104
+    gripper: 1262
+  # 腕部相机观察红色方块的抓取起始位。
+  grasp:
+    shoulder_pan: 1975
+    shoulder_lift: 1450
+    elbow_flex: 2183
+    wrist_flex: 2777
+    wrist_roll: 2100
+    gripper: 1199
+
+  # 小车退出隔板后机械臂最终复位位；成功时保持当前夹爪开度。
+  final:
+    shoulder_pan: 2052
+    shoulder_lift: 963
+    elbow_flex: 2057
+    wrist_flex: 3137
+    wrist_roll: 2104
+    gripper: 1200
+
+# 像素投影到机械臂基座坐标所需的场景与标定。
+scene:
+  table_z_m: 0.25
+  table_normal: [0.0, 0.0, 1.0]
+  block_size_m: [0.03, 0.03, 0.03]
+  grasp_height_mode: center
+
+# 相对项目根目录的相机内参和手眼标定文件。
+intrinsics: grasp/configs/camera_intrinsics.yaml
+handeye: grasp/configs/handeye_ee_cam.yaml
+camera:
+  # 腕部相机设备路径；Linux 上建议使用固定的 /dev/video_* 链接。
+  index_or_path: /dev/video11
+  width: 640
+  height: 480
+  fps: 30
+  # 每次采图前丢弃的帧数，增大可减少拖影但会变慢。
+  settle_frames: 2
+  frame_timeout_s: 5.0
+
+# 红色方块检测阈值；检测不稳定时优先调整这里。
+detector:
+  # 扩大有效视野，仅保留很窄的边缘区域，避免目标落在黄框外无法检测。
+  roi: [0.02, 0.05, 0.98, 0.98]
+  red_hsv:
+    lower1: [0, 75, 45]
+    upper1: [18, 255, 255]
+    lower2: [165, 75, 45]
+    upper2: [180, 255, 255]
+  red_rgb:
+    # 对亮度和曝光变化留出余量；HSV、面积和形状过滤仍会抑制误检。
+    min_r: 85
+    min_r_minus_g: 20
+    min_r_minus_b: 18
+    max_g: 220
+  min_area: 500
+  min_rect_fill: 0.40
+  aspect_ratio_range: [0.35, 2.80]
+  open_kernel: 3
+  close_kernel: 5
+
+grasp:
+  # IK 路径允许误差和工作空间最大水平半径，单位 m。
+  ik_tol_m: 0.012
+  max_horiz_m: 0.28
+  # 主路径的 IK 路点数；过大可能增加无效等待。
+  route_points: 3
+  allow_partial_ik: false
+  # forward 仅根据视觉确定方向，前进距离固定；vision 使用完整视觉测距。
+  range_mode: forward
+  # 夹爪主前进距离、垂直修正和相对前进方向的左偏，单位 m。
+  forward_m: 0.040
+  z_offset_m: 0.000
+  left_m: 0.005
+  # 空握/对准失败后的前进补偿，以及闭爪前的最终水平前探，单位 m。
+  retry_forward_compensation_m: 0.010
+  retry_forward_route_points: 2
+  final_forward_probe_m: 0.025
+  final_forward_route_points: 3
+  preclose_fail_forward_m: 0.030
+  # 夹爪张开和闭合的舵机 ticks，必须按实物标定。
+  gripper_open: 1200
+  gripper_close: 800
+  # 与原抓取脚本一致：每次尝试开始都会开爪；该项保留用于配置兼容。
+  open_gripper_before_plan: false
+  # 是否保存识别和闭爪前调试图；关闭可减少磁盘写入。
+  save_images: true
+  # 是否在闭爪前再次拍照并微调夹爪位置。
+  preclose_check: true
+  # 开爪、闭爪和闭爪前视觉复核的等待时间，单位 s。
+  retry_open_settle_s: 0.15
+  # 闭爪前最多复核次数，以及夹爪中心对应的目标像素。
+  preclose_iters: 4
+  preclose_target_u_px: 420
+  preclose_target_v_px: 360
+  # 允许的像素误差、像素到水平移动的增益及单次最大移动距离。
+  preclose_tol_u_px: 150
+  preclose_tol_v_px: 35
+  preclose_m_per_px: 0.00010
+  preclose_max_step_m: 0.006
+  # 用于过滤过小/过大的红色区域，单位像素面积。
+  preclose_min_area_px: 800
+  preclose_max_area_px: 120000
+  preclose_settle_s: 0.08
+  close_settle_s: 0.50
+  # 闭爪后实际 ticks 与目标 ticks 的差不超过该值时，判为空握。
+  miss_tol_ticks: 50
+  retries: 3
+  # 原脚本的兼容开关；false 时未对准优先重试，最后一次仍强制闭爪。
+  close_even_if_ungraspable: false
+  save_dir: output/mobile_grasp
